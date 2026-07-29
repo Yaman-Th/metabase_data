@@ -1,5 +1,6 @@
 import os
 import json
+import math
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from config import GOOGLE_SHEETS_CREDENTIALS_FILE, GOOGLE_SHEET_ID, GOOGLE_SHEET_RANGE
@@ -53,11 +54,16 @@ def send_to_sheet(data, sheet_id=None, sheet_range=None):
     creds = get_credentials()
     service = build("sheets", "v4", credentials=creds)
 
+    def clean(v):
+        if isinstance(v, float) and math.isnan(v):
+            return ""
+        return v if v is not None else ""
+
     if not data:
         body = {"values": [["No data"]]}
     else:
         headers = list(data[0].keys())
-        rows = [[d.get(h, "") for h in headers] for d in data]
+        rows = [[clean(d.get(h)) for h in headers] for d in data]
         body = {"values": [headers] + rows}
 
     result = service.spreadsheets().values().update(
