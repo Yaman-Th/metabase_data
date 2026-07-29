@@ -7,12 +7,27 @@ from config import GOOGLE_SHEETS_CREDENTIALS_FILE, GOOGLE_SHEET_ID, GOOGLE_SHEET
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 
+def _parse_creds_json(raw):
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    import re
+    m = re.search(r'"private_key":\s*"(.+?)"', raw, re.DOTALL)
+    if m:
+        raw_key = m.group(1)
+        fixed_key = raw_key.replace("\n", "\\n").replace("\r", "")
+        raw_fixed = raw[: m.start(1)] + fixed_key + raw[m.end(1) :]
+        return json.loads(raw_fixed)
+    raise
+
+
 def get_credentials():
     try:
         import streamlit as st
         creds_json = st.secrets.get("GOOGLE_SHEETS_CREDENTIALS")
         if creds_json:
-            info = json.loads(creds_json)
+            info = _parse_creds_json(creds_json)
             return service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
     except Exception:
         pass
