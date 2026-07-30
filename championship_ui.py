@@ -26,7 +26,7 @@ try:
 except Exception:
     _HAS_ARABIC_SHAPE = False
 
-_ARABIC_FONT_PATH = None
+_ARABIC_FP = None
 
 
 def _shape_arabic(text):
@@ -39,34 +39,24 @@ def _shape_arabic(text):
         return str(text)
 
 
-def _setup_arabic_font():
-    global _ARABIC_FONT_PATH
-    if _ARABIC_FONT_PATH:
-        return _ARABIC_FONT_PATH
-    # Check bundled font first
+def _get_arabic_font():
+    global _ARABIC_FP
+    if _ARABIC_FP is not None:
+        return _ARABIC_FP
+    # Bundled font
     bundled = os.path.join(os.path.dirname(__file__), "fonts", "DroidNaskh-Bold.ttf")
     if os.path.exists(bundled):
-        _ARABIC_FONT_PATH = bundled
         fm.fontManager.addfont(bundled)
-        fp = fm.FontProperties(fname=bundled)
-        plt.rcParams["font.family"] = fp.get_name()
-        return _ARABIC_FONT_PATH
-    # Fallback to system fonts
-    for f in fm.findSystemFonts():
-        try:
-            fp = fm.FontProperties(fname=f)
-            name = fp.get_name().lower()
-            if any(x in name for x in ["tahoma", "traditional arabic", "arial", "noto", "droid arabic", "ibm plex sans arabic"]):
-                _ARABIC_FONT_PATH = f
-                fm.fontManager.addfont(f)
-                plt.rcParams["font.family"] = fp.get_name()
-                return _ARABIC_FONT_PATH
-        except Exception:
-            continue
+        _ARABIC_FP = fm.FontProperties(fname=bundled)
+        # Always keep DejaVu Sans as primary for Latin, register Arabic for fallback
+        families = plt.rcParams.get("font.sans-serif", [])
+        fp_name = _ARABIC_FP.get_name()
+        if fp_name not in families:
+            families.insert(0, fp_name)
+        plt.rcParams["font.sans-serif"] = families
+        plt.rcParams["font.family"] = "sans-serif"
+        return _ARABIC_FP
     return None
-
-
-_setup_arabic_font()
 
 LB_HEADERS = {
     "#": "#",
