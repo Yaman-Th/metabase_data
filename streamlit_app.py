@@ -7,6 +7,7 @@ import os
 from config import METABASE_DATASETS, TEMP_DATA_DIR
 from config import GOOGLE_SHEET_ID, GOOGLE_SHEET_RANGE
 from sheets_client import send_to_sheet
+import championship_ui
 
 os.makedirs(TEMP_DATA_DIR, exist_ok=True)
 
@@ -52,12 +53,20 @@ def cache_path(label):
     return os.path.join(TEMP_DATA_DIR, f"cached_{clean}.json")
 
 
-@st.cache_data(ttl=3600)
+def _clear_cache_files():
+    for f in os.listdir(TEMP_DATA_DIR):
+        if f.startswith("cached_"):
+            os.remove(os.path.join(TEMP_DATA_DIR, f))
+
+
 def fetch_data(url, label):
     cpath = cache_path(label)
     if os.path.exists(cpath):
-        with open(cpath, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(cpath, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            os.remove(cpath)
     resp = requests.get(url, timeout=120)
     resp.raise_for_status()
     data = resp.json()
@@ -95,6 +104,25 @@ def get_numeric_cols(df):
 
 
 st.set_page_config(page_title="Metabase Data Viewer", layout="wide")
+
+# Load Metabase data once, share across pages
+if "metabase_data" not in st.session_state:
+    with st.spinner("Loading Metabase data..."):
+        try:
+            default_url = list(METABASE_DATASETS.values())[0]
+            default_label = list(METABASE_DATASETS.keys())[0]
+            st.session_state.metabase_data = fetch_data(default_url, default_label)
+            st.session_state.metabase_df = pd.DataFrame(st.session_state.metabase_data)
+        except Exception as e:
+            st.session_state.metabase_data = []
+            st.session_state.metabase_df = pd.DataFrame()
+
+page = st.sidebar.selectbox("Page", ["Data Viewer", "Championship"], key="page_select")
+
+if page == "Championship":
+    championship_ui.render()
+    st.stop()
+
 st.title("Metabase Data Viewer")
 
 # --- Sidebar ---
@@ -112,6 +140,7 @@ with st.sidebar:
     # Persist dataset choice
     if dataset_label != st.session_state.dataset:
         st.session_state.dataset = dataset_label
+        _clear_cache_files()
         save_state(dict(st.session_state))
 
     metabase_url = METABASE_DATASETS[dataset_label]
@@ -123,6 +152,8 @@ with st.sidebar:
         try:
             raw_data = fetch_data(metabase_url, dataset_label)
             df = pd.DataFrame(raw_data)
+            st.session_state.metabase_data = raw_data
+            st.session_state.metabase_df = df
             st.success(f"Loaded {len(df)} rows, {len(df.columns)} columns")
         except Exception as e:
             st.error(f"Failed to load data: {e}")

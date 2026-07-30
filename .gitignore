@@ -1,5 +1,8 @@
 __pycache__/
 *.pyc
-data_cache/
+data_cache/*.json
+data_cache/championship/*.json
+!data_cache/.gitkeep
+!data_cache/championship/.gitkeep
 metabasedata-*.json
 .streamlit/secrets.toml
