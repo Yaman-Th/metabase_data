@@ -27,6 +27,36 @@ except Exception:
     _HAS_ARABIC_SHAPE = False
 
 _ARABIC_FP = None
+_INITED_MPL = False
+
+
+def _init_mpl_font():
+    global _ARABIC_FP, _INITED_MPL
+    if _INITED_MPL or not _HAS_MPL:
+        return
+    _INITED_MPL = True
+
+    font_dir = os.path.join(os.path.dirname(__file__), "fonts")
+
+    # Amiri has both Arabic + Latin glyphs — set as the only font family
+    amiri_path = os.path.join(font_dir, "Amiri-Regular.ttf")
+    if os.path.exists(amiri_path):
+        fm.fontManager.addfont(amiri_path)
+        _ARABIC_FP = fm.FontProperties(fname=amiri_path)
+        plt.rcParams["font.family"] = _ARABIC_FP.get_name()
+        return
+
+    # Fallback: Droid Naskh is Arabic-only — keep fallback chain for Latin
+    droid_path = os.path.join(font_dir, "DroidNaskh-Bold.ttf")
+    if os.path.exists(droid_path):
+        fm.fontManager.addfont(droid_path)
+        _ARABIC_FP = fm.FontProperties(fname=droid_path)
+        families = list(plt.rcParams.get("font.sans-serif", []))
+        fp_name = _ARABIC_FP.get_name()
+        if fp_name not in families:
+            families.insert(0, fp_name)
+        plt.rcParams["font.sans-serif"] = families
+        plt.rcParams["font.family"] = "sans-serif"
 
 
 def _shape_arabic(text):
@@ -40,23 +70,11 @@ def _shape_arabic(text):
 
 
 def _get_arabic_font():
-    global _ARABIC_FP
-    if _ARABIC_FP is not None:
-        return _ARABIC_FP
-    # Bundled font
-    bundled = os.path.join(os.path.dirname(__file__), "fonts", "DroidNaskh-Bold.ttf")
-    if os.path.exists(bundled):
-        fm.fontManager.addfont(bundled)
-        _ARABIC_FP = fm.FontProperties(fname=bundled)
-        # Always keep DejaVu Sans as primary for Latin, register Arabic for fallback
-        families = plt.rcParams.get("font.sans-serif", [])
-        fp_name = _ARABIC_FP.get_name()
-        if fp_name not in families:
-            families.insert(0, fp_name)
-        plt.rcParams["font.sans-serif"] = families
-        plt.rcParams["font.family"] = "sans-serif"
-        return _ARABIC_FP
-    return None
+    _init_mpl_font()
+    return _ARABIC_FP
+
+
+_init_mpl_font()
 
 LB_HEADERS = {
     "#": "#",
@@ -93,6 +111,7 @@ def _fig_to_jpeg(fig):
 def _leaderboard_to_image(df, title="Leaderboard"):
     if not _HAS_MPL:
         return None
+    _init_mpl_font()
     data = [[_shape_arabic(str(v)) for v in row] for row in df.values]
     cols = [_shape_arabic(str(c)) for c in df.columns.tolist()]
 
@@ -123,6 +142,7 @@ def _leaderboard_to_image(df, title="Leaderboard"):
 def _matches_to_image(matches, round_name):
     if not _HAS_MPL or not matches:
         return None
+    _init_mpl_font()
     rows = []
     for m in matches:
         rows.append([

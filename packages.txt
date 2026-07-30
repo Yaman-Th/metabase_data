@@ -1,0 +1,4 @@
+fonts-noto
+fonts-noto-core
+fonts-noto-extra
+fonts-freefont-ttf
