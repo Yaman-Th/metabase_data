@@ -19,13 +19,20 @@ try:
 except Exception:
     _HAS_MPL = False
 
+try:
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+    _HAS_ARABIC_SHAPE = True
+except Exception:
+    _HAS_ARABIC_SHAPE = False
+
 _ARABIC_FONT_PATH = None
 
 
 def _shape_arabic(text):
+    if not _HAS_ARABIC_SHAPE:
+        return str(text)
     try:
-        import arabic_reshaper
-        from bidi.algorithm import get_display
         reshaped = arabic_reshaper.reshape(str(text))
         return get_display(reshaped)
     except Exception:
