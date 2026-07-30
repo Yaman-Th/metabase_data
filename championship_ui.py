@@ -36,21 +36,27 @@ def _setup_arabic_font():
     global _ARABIC_FONT_PATH
     if _ARABIC_FONT_PATH:
         return _ARABIC_FONT_PATH
-    candidates = []
+    # Check bundled font first
+    bundled = os.path.join(os.path.dirname(__file__), "fonts", "DroidNaskh-Bold.ttf")
+    if os.path.exists(bundled):
+        _ARABIC_FONT_PATH = bundled
+        fm.fontManager.addfont(bundled)
+        fp = fm.FontProperties(fname=bundled)
+        plt.rcParams["font.family"] = fp.get_name()
+        return _ARABIC_FONT_PATH
+    # Fallback to system fonts
     for f in fm.findSystemFonts():
         try:
             fp = fm.FontProperties(fname=f)
             name = fp.get_name().lower()
-            if any(x in name for x in ["tahoma", "traditional arabic", "arial", "ibm plex sans arabic", "droid arabic"]):
-                candidates.append(f)
+            if any(x in name for x in ["tahoma", "traditional arabic", "arial", "noto", "droid arabic", "ibm plex sans arabic"]):
+                _ARABIC_FONT_PATH = f
+                fm.fontManager.addfont(f)
+                plt.rcParams["font.family"] = fp.get_name()
+                return _ARABIC_FONT_PATH
         except Exception:
             continue
-    if candidates:
-        _ARABIC_FONT_PATH = candidates[0]
-        font_entry = fm.FontProperties(fname=_ARABIC_FONT_PATH)
-        plt.rcParams["font.family"] = font_entry.get_name()
-        fm.fontManager.addfont(_ARABIC_FONT_PATH)
-    return _ARABIC_FONT_PATH
+    return None
 
 
 _setup_arabic_font()
