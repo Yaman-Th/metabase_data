@@ -29,6 +29,14 @@ except Exception:
 _ARABIC_FP = None
 _INITED_MPL = False
 
+_ARABIC_RANGES = (
+    (0x0600, 0x06FF),  # Arabic
+    (0x0750, 0x077F),  # Arabic Supplement
+    (0x08A0, 0x08FF),  # Arabic Extended-A
+    (0xFB50, 0xFDFF),  # Arabic Presentation Forms-A
+    (0xFE70, 0xFEFF),  # Arabic Presentation Forms-B
+)
+
 
 def _init_mpl_font():
     global _ARABIC_FP, _INITED_MPL
@@ -38,12 +46,20 @@ def _init_mpl_font():
 
     font_dir = os.path.join(os.path.dirname(__file__), "fonts")
 
-    # Amiri has both Arabic + Latin glyphs — set as the only font family
+    # Amiri has Arabic + Latin glyphs, but we keep the global default as a
+    # Latin font (DejaVu Sans). Amiri is appended to the sans-serif chain so
+    # Arabic glyphs still fall back correctly, while per-element
+    # fontproperties handle Arabic cells explicitly.
     amiri_path = os.path.join(font_dir, "Amiri-Regular.ttf")
     if os.path.exists(amiri_path):
         fm.fontManager.addfont(amiri_path)
-        _ARABIC_FP = fm.FontProperties(fname=amiri_path)
-        plt.rcParams["font.family"] = _ARABIC_FP.get_name()
+        amiri_family = fm.FontProperties(fname=amiri_path).get_name()
+        _ARABIC_FP = fm.FontProperties(family=amiri_family)
+        families = list(plt.rcParams.get("font.sans-serif", []))
+        if amiri_family not in families:
+            families.append(amiri_family)
+        plt.rcParams["font.sans-serif"] = families
+        plt.rcParams["font.family"] = "sans-serif"
         return
 
     # Fallback: Droid Naskh is Arabic-only — keep fallback chain for Latin
@@ -57,6 +73,27 @@ def _init_mpl_font():
             families.insert(0, fp_name)
         plt.rcParams["font.sans-serif"] = families
         plt.rcParams["font.family"] = "sans-serif"
+
+
+def _has_arabic(text):
+    if not text:
+        return False
+    for ch in str(text):
+        cp = ord(ch)
+        if any(lo <= cp <= hi for lo, hi in _ARABIC_RANGES):
+            return True
+    return False
+
+
+def _apply_arabic_fonts(table):
+    if _ARABIC_FP is None:
+        return
+    for key, cell in table.get_celld().items():
+        txt = cell.get_text()
+        if _has_arabic(txt.get_text()):
+            fp = txt.get_fontproperties().copy()
+            fp.set_family(_ARABIC_FP.get_family())
+            txt.set_fontproperties(fp)
 
 
 def _shape_arabic(text):
@@ -115,6 +152,10 @@ def _leaderboard_to_image(df, title="Leaderboard"):
     data = [[_shape_arabic(str(v)) for v in row] for row in df.values]
     cols = [_shape_arabic(str(c)) for c in df.columns.tolist()]
 
+    # RTL reading direction: render columns right-to-left
+    data = [list(reversed(row)) for row in data]
+    cols = list(reversed(cols))
+
     fig, ax = plt.subplots(figsize=(10, 0.5 + 0.5 * len(data)))
     ax.axis("off")
 
@@ -135,6 +176,7 @@ def _leaderboard_to_image(df, title="Leaderboard"):
         cell.set_edgecolor("#cccccc")
         cell.set_linewidth(0.5)
 
+    _apply_arabic_fonts(table)
     ax.set_title(_shape_arabic(title), fontsize=16, fontweight="bold", pad=20, color="#1f77b4")
     return _fig_to_jpeg(fig)
 
@@ -152,6 +194,10 @@ def _matches_to_image(matches, round_name):
         ])
     cols = _map_headers(["Student 1", "Student 2", "Pages S1", "Pages S2", "Result", "Pts S1", "Pts S2"])
     cols = [_shape_arabic(c) for c in cols]
+
+    # RTL reading direction: render columns right-to-left
+    rows = [list(reversed(r)) for r in rows]
+    cols = list(reversed(cols))
 
     fig, ax = plt.subplots(figsize=(10, 0.5 + 0.5 * len(rows)))
     ax.axis("off")
@@ -173,6 +219,7 @@ def _matches_to_image(matches, round_name):
         cell.set_edgecolor("#cccccc")
         cell.set_linewidth(0.5)
 
+    _apply_arabic_fonts(table)
     ax.set_title(_shape_arabic(f"{round_name} - Match Results"), fontsize=16, fontweight="bold", pad=20, color="#2ca02c")
     return _fig_to_jpeg(fig)
 
