@@ -46,6 +46,8 @@ def add_student(name):
 def delete_student(sid):
     students = [s for s in get_students() if s["id"] != sid]
     _save("students", students)
+    homework = [h for h in get_homework() if h["student_id"] != sid]
+    _save("homework", homework)
 
 
 def get_student_name(sid, students=None):
@@ -105,6 +107,8 @@ def delete_round(rid):
     del_ids = {m["id"] for m in round_matches}
     daily = [d for d in get_daily() if d["match_id"] not in del_ids]
     _save("daily", daily)
+    homework = [h for h in get_homework() if h["match_id"] not in del_ids]
+    _save("homework", homework)
 
 
 # --- Matches ---
@@ -130,14 +134,16 @@ def delete_match(mid):
     _save("matches", matches)
     daily = [d for d in get_daily() if d["match_id"] != mid]
     _save("daily", daily)
+    homework = [h for h in get_homework() if h["match_id"] != mid]
+    _save("homework", homework)
 
 
-# --- Daily Records ---
+# --- Daily Records (pages, fetched from Metabase or entered manually) ---
 def get_daily():
     return _get("daily")
 
 
-def upsert_daily(match_id, student_id, rec_date, jadeed, tikrar, homework_jadeed=0.0, homework_tikrar=0.0):
+def upsert_daily(match_id, student_id, rec_date, jadeed, tikrar):
     daily = get_daily()
     key = f"{match_id}_{student_id}_{rec_date}"
     for d in daily:
@@ -145,8 +151,6 @@ def upsert_daily(match_id, student_id, rec_date, jadeed, tikrar, homework_jadeed
         if dk == key:
             d["jadeed"] = jadeed
             d["tikrar"] = tikrar
-            d["homework_jadeed"] = homework_jadeed
-            d["homework_tikrar"] = homework_tikrar
             _save("daily", daily)
             return
     daily.append({
@@ -155,23 +159,21 @@ def upsert_daily(match_id, student_id, rec_date, jadeed, tikrar, homework_jadeed
         "date": str(rec_date),
         "jadeed": jadeed,
         "tikrar": tikrar,
-        "homework_jadeed": homework_jadeed,
-        "homework_tikrar": homework_tikrar,
     })
     _save("daily", daily)
 
 
 def upsert_daily_batch(records):
     """records: list of dicts with keys match_id, student_id, date, jadeed,
-    tikrar, homework_jadeed, homework_tikrar. Persists all records in one
-    write to avoid a Sheets API call per record."""
+    tikrar. Persists all records in one write to avoid a Sheets API call per
+    record. Only touches the daily (pages) table; homework targets live in the
+    homework table and are never overwritten here."""
     daily = get_daily()
     by_key = {f"{d['match_id']}_{d['student_id']}_{d['date']}": d for d in daily}
     for r in records:
         key = f"{r['match_id']}_{r['student_id']}_{r['date']}"
         if key in by_key:
-            by_key[key].update({k: v for k, v in r.items() if k in (
-                "jadeed", "tikrar", "homework_jadeed", "homework_tikrar")})
+            by_key[key].update({"jadeed": r.get("jadeed", 0), "tikrar": r.get("tikrar", 0)})
         else:
             daily.append({
                 "match_id": r["match_id"],
@@ -179,8 +181,6 @@ def upsert_daily_batch(records):
                 "date": str(r["date"]),
                 "jadeed": r.get("jadeed", 0),
                 "tikrar": r.get("tikrar", 0),
-                "homework_jadeed": r.get("homework_jadeed", 0),
-                "homework_tikrar": r.get("homework_tikrar", 0),
             })
     _save("daily", daily)
 
@@ -190,6 +190,38 @@ def delete_daily(mid, sid, rec_date):
     key = f"{mid}_{sid}_{rec_date}"
     daily = [d for d in daily if f"{d['match_id']}_{d['student_id']}_{d['date']}" != key]
     _save("daily", daily)
+
+
+# --- Homework Records (manually entered, never overwritten by fetch) ---
+def get_homework():
+    return _get("homework")
+
+
+def upsert_homework(match_id, student_id, rec_date, homework_jadeed, homework_tikrar):
+    homework = get_homework()
+    key = f"{match_id}_{student_id}_{rec_date}"
+    for h in homework:
+        hk = f"{h['match_id']}_{h['student_id']}_{h['date']}"
+        if hk == key:
+            h["homework_jadeed"] = homework_jadeed
+            h["homework_tikrar"] = homework_tikrar
+            _save("homework", homework)
+            return
+    homework.append({
+        "match_id": match_id,
+        "student_id": student_id,
+        "date": str(rec_date),
+        "homework_jadeed": homework_jadeed,
+        "homework_tikrar": homework_tikrar,
+    })
+    _save("homework", homework)
+
+
+def delete_homework(mid, sid, rec_date):
+    homework = get_homework()
+    key = f"{mid}_{sid}_{rec_date}"
+    homework = [h for h in homework if f"{h['match_id']}_{h['student_id']}_{h['date']}" != key]
+    _save("homework", homework)
 
 
 # --- Calculations ---
@@ -202,17 +234,25 @@ def get_student_total_pages(match_id, student_id):
 
 
 def get_student_daily_bonus_days(match_id, student_id, round_start, round_end):
-    """Count days where BOTH homework types are met (jadeed >= hw_j AND tikrar >= hw_t)."""
+    """Count days where BOTH homework types are met (jadeed >= hw_j AND tikrar >= hw_t).
+    Homework targets come from the homework table (manual entry); legacy daily
+    records with embedded homework fields are honored, then student defaults."""
     days = 0
     start = datetime.strptime(str(round_start), "%Y-%m-%d").date() if isinstance(round_start, str) else round_start
     end = datetime.strptime(str(round_end), "%Y-%m-%d").date() if isinstance(round_end, str) else round_end
+    hw_by_date = {}
+    for h in get_homework():
+        if h["match_id"] == match_id and h["student_id"] == student_id:
+            hw_by_date[h["date"]] = (h.get("homework_jadeed", 0), h.get("homework_tikrar", 0))
+    def_hw_j, def_hw_t = get_student_homework_defaults(student_id)
     for d in get_daily():
         if d["match_id"] == match_id and d["student_id"] == student_id:
             d_date = datetime.strptime(d["date"], "%Y-%m-%d").date()
             if not (start <= d_date <= end):
                 continue
-            hw_j = d.get("homework_jadeed", 0)
-            hw_t = d.get("homework_tikrar", 0)
+            hw_j, hw_t = hw_by_date.get(d["date"], (d.get("homework_jadeed", 0), d.get("homework_tikrar", 0)))
+            if hw_j <= 0 and hw_t <= 0:
+                hw_j, hw_t = def_hw_j, def_hw_t
             if hw_j <= 0 and hw_t <= 0:
                 continue
             if d.get("jadeed", 0) >= hw_j and d.get("tikrar", 0) >= hw_t:

@@ -537,8 +537,17 @@ def render():
                             existing = d
                             break
 
-                    def_hw_j = existing.get("homework_jadeed", 0.0) if existing else ch.get_student_homework_defaults(sid, all_students)[0]
-                    def_hw_t = existing.get("homework_tikrar", 0.0) if existing else ch.get_student_homework_defaults(sid, all_students)[1]
+                    existing_hw = None
+                    for h in ch.get_homework():
+                        if h["match_id"] == mid and h["student_id"] == sid and h["date"] == str(entry_date):
+                            existing_hw = h
+                            break
+
+                    if existing_hw:
+                        def_hw_j = existing_hw.get("homework_jadeed", 0.0)
+                        def_hw_t = existing_hw.get("homework_tikrar", 0.0)
+                    else:
+                        def_hw_j, def_hw_t = ch.get_student_homework_defaults(sid, all_students)
 
                     col_j, col_t, col_hj, col_ht, col_s, col_del = st.columns([1, 1, 1, 1, 1, 1])
                     with col_j:
@@ -551,25 +560,36 @@ def render():
                         hw_t = col_ht.number_input("Tikrar HW", value=def_hw_t, min_value=0.0, key=f"hwt_{mid}_{sid}_{entry_date}")
                     with col_s:
                         if st.button("Save", key=f"sv_{mid}_{sid}_{entry_date}"):
-                            ch.upsert_daily(mid, sid, entry_date, jadeed, tikrar, hw_j, hw_t)
+                            ch.upsert_daily(mid, sid, entry_date, jadeed, tikrar)
+                            ch.upsert_homework(mid, sid, entry_date, hw_j, hw_t)
                             st.rerun()
                     with col_del:
                         if existing and st.button("Clear", key=f"cl_{mid}_{sid}_{entry_date}"):
                             ch.delete_daily(mid, sid, entry_date)
+                            ch.delete_homework(mid, sid, entry_date)
                             st.rerun()
 
         st.divider()
         st.subheader("Recent Records")
+
         all_daily = ch.get_daily()
+        all_hw = ch.get_homework()
+        hw_map = {(h["match_id"], h["student_id"], h["date"]): h for h in all_hw}
+
         if all_daily:
             recent = sorted(all_daily, key=lambda x: x["date"], reverse=True)[:50]
             rows = []
             for d in recent:
                 sname = ch.get_student_name(d["student_id"], all_students)
+                h = hw_map.get((d["match_id"], d["student_id"], d["date"]))
+                if h:
+                    hw_j = h.get("homework_jadeed", 0)
+                    hw_t = h.get("homework_tikrar", 0)
+                else:
+                    hw_j = d.get("homework_jadeed", 0)
+                    hw_t = d.get("homework_tikrar", 0)
                 j = d.get("jadeed", 0)
                 t = d.get("tikrar", 0)
-                hw_j = d.get("homework_jadeed", 0)
-                hw_t = d.get("homework_tikrar", 0)
                 ok = hw_j > 0 and hw_t > 0 and j >= hw_j and t >= hw_t
                 rows.append({
                     "Date": d["date"],
@@ -580,9 +600,26 @@ def render():
                     "Tikrar HW": f"{t}/{hw_t}",
                     "Done": "✅" if ok else "❌",
                 })
+            st.markdown("**Daily pages (fetched from Metabase / entered)**")
             st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
         else:
             st.info("No daily records yet")
+
+        if all_hw:
+            recent_hw = sorted(all_hw, key=lambda x: x["date"], reverse=True)[:50]
+            rows_hw = []
+            for h in recent_hw:
+                sname = ch.get_student_name(h["student_id"], all_students)
+                rows_hw.append({
+                    "Date": h["date"],
+                    "Student": sname,
+                    "Jadeed HW": h.get("homework_jadeed", 0),
+                    "Tikrar HW": h.get("homework_tikrar", 0),
+                })
+            st.markdown("**Homework targets (manually entered)**")
+            st.dataframe(pd.DataFrame(rows_hw), width='stretch', hide_index=True)
+        else:
+            st.info("No homework records yet")
 
     # =========================================================
     # TAB 4: LEADERBOARD
@@ -679,7 +716,6 @@ def _batch_fetch_round(rnd):
     for m in matches:
         for sid in [m["student1_id"], m["student2_id"]]:
             sname = ch.get_student_name(sid)
-            hw_j, hw_t = ch.get_student_homework_defaults(sid)
             for i in range(total_dates):
                 d = start + timedelta(days=i)
                 j, t = _fetch_from_metabase(sname, d)
@@ -690,8 +726,6 @@ def _batch_fetch_round(rnd):
                         "date": str(d),
                         "jadeed": j,
                         "tikrar": t,
-                        "homework_jadeed": hw_j,
-                        "homework_tikrar": hw_t,
                     })
                     fetched += 1
                 done += 1

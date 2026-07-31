@@ -18,7 +18,7 @@ def _db_sheet_id():
 
 DB_SHEET_ID = _db_sheet_id()
 DB_TAB_PREFIX = "ch_"
-COLLECTIONS = ("students", "rounds", "matches", "daily")
+COLLECTIONS = ("students", "rounds", "matches", "daily", "homework")
 CHUNK_SIZE = 40000
 
 _CACHE_DIR = os.path.join(TEMP_DATA_DIR, "championship")
