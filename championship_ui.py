@@ -336,6 +336,13 @@ def _fetch_from_metabase(student_name, entry_date):
 def render():
     st.title("Championship")
 
+    if "ch_storage_error" in st.session_state:
+        st.warning(
+            "Could not sync to Google Sheets, so changes are only saved "
+            f"locally (will be lost on app restart): {st.session_state['ch_storage_error']}"
+        )
+        del st.session_state["ch_storage_error"]
+
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Students", "Rounds & Matches", "Daily Entry", "Leaderboard", "Export"
     ])
@@ -667,6 +674,7 @@ def _batch_fetch_round(rnd):
     total_ops = len(matches) * 2 * total_dates
     done = 0
     fetched = 0
+    records = []
 
     for m in matches:
         for sid in [m["student1_id"], m["student2_id"]]:
@@ -676,12 +684,22 @@ def _batch_fetch_round(rnd):
                 d = start + timedelta(days=i)
                 j, t = _fetch_from_metabase(sname, d)
                 if j is not None:
-                    ch.upsert_daily(m["id"], sid, d, j, t, hw_j, hw_t)
+                    records.append({
+                        "match_id": m["id"],
+                        "student_id": sid,
+                        "date": str(d),
+                        "jadeed": j,
+                        "tikrar": t,
+                        "homework_jadeed": hw_j,
+                        "homework_tikrar": hw_t,
+                    })
                     fetched += 1
                 done += 1
                 if done % 10 == 0:
                     progress.progress(done / total_ops, text=f"Fetched {fetched} records...")
 
+    if records:
+        ch.upsert_daily_batch(records)
     progress.empty()
     if fetched:
         st.success(f"Fetched {fetched} daily records from Metabase for round {rnd['name']}")

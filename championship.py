@@ -1,41 +1,36 @@
-import json
-import os
 import math
 from datetime import datetime, date
-from config import TEMP_DATA_DIR
-
-DATA_DIR = os.path.join(TEMP_DATA_DIR, "championship")
-os.makedirs(DATA_DIR, exist_ok=True)
-
-STUDENTS_FILE = os.path.join(DATA_DIR, "students.json")
-ROUNDS_FILE = os.path.join(DATA_DIR, "rounds.json")
-MATCHES_FILE = os.path.join(DATA_DIR, "matches.json")
-DAILY_FILE = os.path.join(DATA_DIR, "daily.json")
+import storage
 
 POINTS_DAILY = 2
 POINTS_WIN = 3
 POINTS_DRAW = 1
 POINTS_LOSS = 0
 
-
-def _load_json(path, default=None):
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return default or []
-    return default or []
+_CACHE = None
 
 
-def _save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def _load_cache():
+    global _CACHE
+    if _CACHE is None:
+        _CACHE = storage.load_all()
+        for name in storage.COLLECTIONS:
+            _CACHE.setdefault(name, [])
+    return _CACHE
+
+
+def _get(name):
+    return _load_cache().get(name, [])
+
+
+def _save(name, rows):
+    _load_cache()[name] = rows
+    storage.save_collection(name, rows)
 
 
 # --- Students ---
 def get_students():
-    return _load_json(STUDENTS_FILE)
+    return _get("students")
 
 
 def add_student(name):
@@ -44,13 +39,13 @@ def add_student(name):
         return False
     sid = max([s["id"] for s in students], default=0) + 1
     students.append({"id": sid, "name": name})
-    _save_json(STUDENTS_FILE, students)
+    _save("students", students)
     return True
 
 
 def delete_student(sid):
     students = [s for s in get_students() if s["id"] != sid]
-    _save_json(STUDENTS_FILE, students)
+    _save("students", students)
 
 
 def get_student_name(sid, students=None):
@@ -77,14 +72,14 @@ def update_student_homework_defaults(sid, hw_j, hw_t):
         if s["id"] == sid:
             s["homework_jadeed"] = hw_j
             s["homework_tikrar"] = hw_t
-            _save_json(STUDENTS_FILE, students)
+            _save("students", students)
             return True
     return False
 
 
 # --- Rounds ---
 def get_rounds():
-    return _load_json(ROUNDS_FILE)
+    return _get("rounds")
 
 
 def add_round(name, start_date, end_date, stage="group"):
@@ -97,20 +92,24 @@ def add_round(name, start_date, end_date, stage="group"):
         "end_date": str(end_date),
         "stage": stage,
     })
-    _save_json(ROUNDS_FILE, rounds)
+    _save("rounds", rounds)
     return rid
 
 
 def delete_round(rid):
+    round_matches = [m for m in get_matches() if m["round_id"] == rid]
     rounds = [r for r in get_rounds() if r["id"] != rid]
-    _save_json(ROUNDS_FILE, rounds)
+    _save("rounds", rounds)
     matches = [m for m in get_matches() if m["round_id"] != rid]
-    _save_json(MATCHES_FILE, matches)
+    _save("matches", matches)
+    del_ids = {m["id"] for m in round_matches}
+    daily = [d for d in get_daily() if d["match_id"] not in del_ids]
+    _save("daily", daily)
 
 
 # --- Matches ---
 def get_matches():
-    return _load_json(MATCHES_FILE)
+    return _get("matches")
 
 
 def add_match(round_id, student1_id, student2_id):
@@ -122,20 +121,20 @@ def add_match(round_id, student1_id, student2_id):
         "student1_id": student1_id,
         "student2_id": student2_id,
     })
-    _save_json(MATCHES_FILE, matches)
+    _save("matches", matches)
     return mid
 
 
 def delete_match(mid):
     matches = [m for m in get_matches() if m["id"] != mid]
-    _save_json(MATCHES_FILE, matches)
+    _save("matches", matches)
     daily = [d for d in get_daily() if d["match_id"] != mid]
-    _save_json(DAILY_FILE, daily)
+    _save("daily", daily)
 
 
 # --- Daily Records ---
 def get_daily():
-    return _load_json(DAILY_FILE)
+    return _get("daily")
 
 
 def upsert_daily(match_id, student_id, rec_date, jadeed, tikrar, homework_jadeed=0.0, homework_tikrar=0.0):
@@ -148,7 +147,7 @@ def upsert_daily(match_id, student_id, rec_date, jadeed, tikrar, homework_jadeed
             d["tikrar"] = tikrar
             d["homework_jadeed"] = homework_jadeed
             d["homework_tikrar"] = homework_tikrar
-            _save_json(DAILY_FILE, daily)
+            _save("daily", daily)
             return
     daily.append({
         "match_id": match_id,
@@ -159,14 +158,38 @@ def upsert_daily(match_id, student_id, rec_date, jadeed, tikrar, homework_jadeed
         "homework_jadeed": homework_jadeed,
         "homework_tikrar": homework_tikrar,
     })
-    _save_json(DAILY_FILE, daily)
+    _save("daily", daily)
+
+
+def upsert_daily_batch(records):
+    """records: list of dicts with keys match_id, student_id, date, jadeed,
+    tikrar, homework_jadeed, homework_tikrar. Persists all records in one
+    write to avoid a Sheets API call per record."""
+    daily = get_daily()
+    by_key = {f"{d['match_id']}_{d['student_id']}_{d['date']}": d for d in daily}
+    for r in records:
+        key = f"{r['match_id']}_{r['student_id']}_{r['date']}"
+        if key in by_key:
+            by_key[key].update({k: v for k, v in r.items() if k in (
+                "jadeed", "tikrar", "homework_jadeed", "homework_tikrar")})
+        else:
+            daily.append({
+                "match_id": r["match_id"],
+                "student_id": r["student_id"],
+                "date": str(r["date"]),
+                "jadeed": r.get("jadeed", 0),
+                "tikrar": r.get("tikrar", 0),
+                "homework_jadeed": r.get("homework_jadeed", 0),
+                "homework_tikrar": r.get("homework_tikrar", 0),
+            })
+    _save("daily", daily)
 
 
 def delete_daily(mid, sid, rec_date):
     daily = get_daily()
     key = f"{mid}_{sid}_{rec_date}"
     daily = [d for d in daily if f"{d['match_id']}_{d['student_id']}_{d['date']}" != key]
-    _save_json(DAILY_FILE, daily)
+    _save("daily", daily)
 
 
 # --- Calculations ---
