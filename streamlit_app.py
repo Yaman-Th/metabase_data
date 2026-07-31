@@ -143,6 +143,10 @@ with st.sidebar:
         _clear_cache_files()
         save_state(dict(st.session_state))
 
+    if st.button("Refresh Data", width="stretch", type="primary"):
+        _clear_cache_files()
+        st.rerun()
+
     metabase_url = METABASE_DATASETS[dataset_label]
 
     st.divider()
