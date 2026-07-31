@@ -28,6 +28,7 @@ except Exception:
 
 _ARABIC_FP = None
 _INITED_MPL = False
+_MPL_NATIVE_SHAPING = None
 
 _ARABIC_RANGES = (
     (0x0600, 0x06FF),  # Arabic
@@ -96,8 +97,29 @@ def _apply_arabic_fonts(table):
             txt.set_fontproperties(fp)
 
 
+def _matplotlib_native_shaping():
+    """Whether matplotlib applies complex text layout (bidi + Arabic shaping)
+    itself via libraqm. Since matplotlib 3.11 compiles libraqm/HarfBuzz into
+    the extension, any string is shaped natively, so pre-shaped Arabic would
+    be processed twice (resulting in mirrored letters). In that case we must
+    pass the raw Arabic text and let matplotlib shape it.
+    """
+    global _MPL_NATIVE_SHAPING
+    if _MPL_NATIVE_SHAPING is not None:
+        return _MPL_NATIVE_SHAPING
+    result = False
+    try:
+        import matplotlib.ft2font as _ft2
+        v = getattr(_ft2, "__libraqm_version__", "")
+        result = bool(v) or hasattr(_ft2.FT2Font, "_layout")
+    except Exception:
+        result = False
+    _MPL_NATIVE_SHAPING = result
+    return result
+
+
 def _shape_arabic(text):
-    if not _HAS_ARABIC_SHAPE:
+    if not _HAS_ARABIC_SHAPE or _matplotlib_native_shaping():
         return str(text)
     try:
         reshaped = arabic_reshaper.reshape(str(text))
