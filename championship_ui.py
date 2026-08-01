@@ -261,6 +261,16 @@ def _fetch_dataset(url, label):
     return data
 
 
+def _clear_metabase_cache():
+    """Drop cached Metabase dataset files so the next fetch is fresh."""
+    for f in os.listdir(TEMP_DATA_DIR):
+        if f.startswith("ch_") and f.endswith(".json"):
+            try:
+                os.remove(os.path.join(TEMP_DATA_DIR, f))
+            except OSError:
+                pass
+
+
 def _extract_value(df, student_name, entry_date, page_patterns=None):
     if df is None or df.empty or not student_name:
         return None
@@ -698,6 +708,7 @@ def _do_export(sheet_id, sheet_range):
 
 
 def _batch_fetch_round(rnd):
+    _clear_metabase_cache()
     matches = [m for m in ch.get_matches() if m["round_id"] == rnd["id"]]
     if not matches:
         st.warning("No matches in this round")
