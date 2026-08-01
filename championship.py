@@ -225,10 +225,19 @@ def delete_homework(mid, sid, rec_date):
 
 
 # --- Calculations ---
-def get_student_total_pages(match_id, student_id):
+def get_student_total_pages(match_id, student_id, round_start=None, round_end=None):
+    """Sum pages (jadeed + tikrar) for the student in the match, restricted to
+    the round's date range when provided (so results cover exactly the round)."""
     total = 0.0
+    start = datetime.strptime(str(round_start), "%Y-%m-%d").date() if round_start else None
+    end = datetime.strptime(str(round_end), "%Y-%m-%d").date() if round_end else None
     for d in get_daily():
         if d["match_id"] == match_id and d["student_id"] == student_id:
+            d_date = datetime.strptime(d["date"], "%Y-%m-%d").date()
+            if start and d_date < start:
+                continue
+            if end and d_date > end:
+                continue
             total += d.get("jadeed", 0) + d.get("tikrar", 0)
     return total
 
@@ -261,8 +270,8 @@ def get_student_daily_bonus_days(match_id, student_id, round_start, round_end):
 
 
 def compute_match_result(match, round_obj):
-    s1_total = get_student_total_pages(match["id"], match["student1_id"])
-    s2_total = get_student_total_pages(match["id"], match["student2_id"])
+    s1_total = get_student_total_pages(match["id"], match["student1_id"], round_obj["start_date"], round_obj["end_date"])
+    s2_total = get_student_total_pages(match["id"], match["student2_id"], round_obj["start_date"], round_obj["end_date"])
     days1 = get_student_daily_bonus_days(match["id"], match["student1_id"], round_obj["start_date"], round_obj["end_date"])
     days2 = get_student_daily_bonus_days(match["id"], match["student2_id"], round_obj["start_date"], round_obj["end_date"])
 
@@ -286,15 +295,26 @@ def compute_match_result(match, round_obj):
         points1 += POINTS_DRAW
         points2 += POINTS_DRAW
 
+    start = datetime.strptime(str(round_obj["start_date"]), "%Y-%m-%d").date()
+    end = datetime.strptime(str(round_obj["end_date"]), "%Y-%m-%d").date()
+
+    def _records(sid):
+        for d in get_daily():
+            if d["match_id"] != match["id"] or d["student_id"] != sid:
+                continue
+            d_date = datetime.strptime(d["date"], "%Y-%m-%d").date()
+            if start <= d_date <= end:
+                yield d
+
     return {
         "student1_id": match["student1_id"],
         "student2_id": match["student2_id"],
         "total_pages1": s1_total,
         "total_pages2": s2_total,
-        "jadeed1": sum(d.get("jadeed", 0) for d in get_daily() if d["match_id"] == match["id"] and d["student_id"] == match["student1_id"]),
-        "tikrar1": sum(d.get("tikrar", 0) for d in get_daily() if d["match_id"] == match["id"] and d["student_id"] == match["student1_id"]),
-        "jadeed2": sum(d.get("jadeed", 0) for d in get_daily() if d["match_id"] == match["id"] and d["student_id"] == match["student2_id"]),
-        "tikrar2": sum(d.get("tikrar", 0) for d in get_daily() if d["match_id"] == match["id"] and d["student_id"] == match["student2_id"]),
+        "jadeed1": sum(d.get("jadeed", 0) for d in _records(match["student1_id"])),
+        "tikrar1": sum(d.get("tikrar", 0) for d in _records(match["student1_id"])),
+        "jadeed2": sum(d.get("jadeed", 0) for d in _records(match["student2_id"])),
+        "tikrar2": sum(d.get("tikrar", 0) for d in _records(match["student2_id"])),
         "daily_days1": days1,
         "daily_days2": days2,
         "result": match_result,

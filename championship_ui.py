@@ -723,6 +723,7 @@ def _batch_fetch_round(rnd):
     done = 0
     fetched = 0
     records = []
+    existing_keys = {(d["match_id"], d["student_id"], d["date"]) for d in ch.get_daily()}
 
     for m in matches:
         for sid in [m["student1_id"], m["student2_id"]]:
@@ -739,6 +740,16 @@ def _batch_fetch_round(rnd):
                         "tikrar": t,
                     })
                     fetched += 1
+                else:
+                    key = (m["id"], sid, str(d))
+                    if key not in existing_keys:
+                        records.append({
+                            "match_id": m["id"],
+                            "student_id": sid,
+                            "date": str(d),
+                            "jadeed": 0.0,
+                            "tikrar": 0.0,
+                        })
                 done += 1
                 if done % 10 == 0:
                     progress.progress(done / total_ops, text=f"Fetched {fetched} records...")
@@ -746,7 +757,11 @@ def _batch_fetch_round(rnd):
     if records:
         ch.upsert_daily_batch(records)
     progress.empty()
-    if fetched:
-        st.success(f"Fetched {fetched} daily records from Metabase for round {rnd['name']}")
+    if records:
+        missing = len(records) - fetched
+        st.success(
+            f"Round {rnd['name']}: {len(records)} daily records synced "
+            f"({fetched} from Metabase, {missing} set to 0 pages for days with no Metabase row)"
+        )
     else:
-        st.info("No matching Metabase data found for this round")
+        st.info("No daily data for this round")
