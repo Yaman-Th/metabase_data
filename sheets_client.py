@@ -23,10 +23,27 @@ def _parse_creds_json(raw):
     raise
 
 
+def _secret_value(st, *paths):
+    for path in paths:
+        node = st.secrets
+        try:
+            for k in path:
+                node = node[k]
+            if node:
+                return node
+        except Exception:
+            continue
+    return None
+
+
 def get_credentials():
     try:
         import streamlit as st
-        creds_json = st.secrets.get("GOOGLE_SHEETS_CREDENTIALS")
+        creds_json = _secret_value(
+            st,
+            ("GOOGLE_SHEETS_CREDENTIALS",),
+            ("secrets", "GOOGLE_SHEETS_CREDENTIALS"),
+        )
         if creds_json:
             info = _parse_creds_json(creds_json)
             return service_account.Credentials.from_service_account_info(info, scopes=SCOPES)

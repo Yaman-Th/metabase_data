@@ -7,12 +7,15 @@ from config import GOOGLE_SHEET_ID, CH_DB_SHEET_ID, TEMP_DATA_DIR
 
 
 def _db_sheet_id():
-    try:
-        secret = st.secrets.get("CH_DB_SHEET_ID")
-        if secret:
-            return secret
-    except Exception:
-        pass
+    for path in (("CH_DB_SHEET_ID",), ("secrets", "CH_DB_SHEET_ID")):
+        node = st.secrets
+        try:
+            for k in path:
+                node = node[k]
+            if node:
+                return node
+        except Exception:
+            continue
     return CH_DB_SHEET_ID or GOOGLE_SHEET_ID
 
 
