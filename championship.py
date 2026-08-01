@@ -234,9 +234,11 @@ def get_student_total_pages(match_id, student_id):
 
 
 def get_student_daily_bonus_days(match_id, student_id, round_start, round_end):
-    """Count days where BOTH homework types are met (jadeed >= hw_j AND tikrar >= hw_t).
-    Homework targets come from the homework table (manual entry); legacy daily
-    records with embedded homework fields are honored, then student defaults."""
+    """Count days where BOTH homework types are met (jadeed >= hw_j AND
+    tikrar >= hw_t). A 0-page homework target is always met, so a student with
+    no homework (0/0) who recites nothing is counted as done. Homework targets
+    come from the homework table (manual entry); legacy daily records with
+    embedded homework fields are honored, then student defaults."""
     days = 0
     start = datetime.strptime(str(round_start), "%Y-%m-%d").date() if isinstance(round_start, str) else round_start
     end = datetime.strptime(str(round_end), "%Y-%m-%d").date() if isinstance(round_end, str) else round_end
@@ -253,8 +255,6 @@ def get_student_daily_bonus_days(match_id, student_id, round_start, round_end):
             hw_j, hw_t = hw_by_date.get(d["date"], (d.get("homework_jadeed", 0), d.get("homework_tikrar", 0)))
             if hw_j <= 0 and hw_t <= 0:
                 hw_j, hw_t = def_hw_j, def_hw_t
-            if hw_j <= 0 and hw_t <= 0:
-                continue
             if d.get("jadeed", 0) >= hw_j and d.get("tikrar", 0) >= hw_t:
                 days += 1
     return days

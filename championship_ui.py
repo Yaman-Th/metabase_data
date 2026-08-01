@@ -589,7 +589,7 @@ def render():
                     hw_t = d.get("homework_tikrar", 0)
                 j = d.get("jadeed", 0)
                 t = d.get("tikrar", 0)
-                ok = hw_j > 0 and hw_t > 0 and j >= hw_j and t >= hw_t
+                ok = j >= hw_j and t >= hw_t
                 rows.append({
                     "Date": d["date"],
                     "Student": sname,
