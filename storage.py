@@ -3,7 +3,7 @@ import os
 import streamlit as st
 from googleapiclient.discovery import build
 from sheets_client import get_credentials
-from config import GOOGLE_SHEET_ID, CH_DB_SHEET_ID, TEMP_DATA_DIR
+from config import CH_DB_SHEET_ID, TEMP_DATA_DIR
 
 
 def _db_sheet_id():
@@ -16,7 +16,13 @@ def _db_sheet_id():
                 return node
         except Exception:
             continue
-    return CH_DB_SHEET_ID or GOOGLE_SHEET_ID
+    if CH_DB_SHEET_ID:
+        return CH_DB_SHEET_ID
+    raise RuntimeError(
+        "CH_DB_SHEET_ID is not configured. The Championship database must use "
+        "its own dedicated spreadsheet and must never fall back to the Data "
+        "Viewer sheet (GOOGLE_SHEET_ID)."
+    )
 
 
 DB_SHEET_ID = _db_sheet_id()

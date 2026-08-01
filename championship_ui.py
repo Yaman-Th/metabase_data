@@ -6,8 +6,7 @@ import os
 import io
 from datetime import datetime, date, timedelta
 import championship as ch
-from config import METABASE_DATASETS, TEMP_DATA_DIR
-from config import GOOGLE_SHEET_ID, GOOGLE_SHEET_RANGE
+from config import METABASE_DATASETS, TEMP_DATA_DIR, GOOGLE_SHEET_ID, GOOGLE_SHEET_RANGE, CH_DB_SHEET_ID
 from sheets_client import send_to_sheet
 
 try:
@@ -668,8 +667,9 @@ def render():
     # =========================================================
     with tab5:
         st.subheader("Export to Google Sheets")
-        sheet_id = st.text_input("Google Sheet ID", value=GOOGLE_SHEET_ID or "")
-        sheet_range = st.text_input("Sheet Range", value=GOOGLE_SHEET_RANGE)
+        st.caption("Exports go to the Championship DB spreadsheet (Sheet1), separate from the Data Viewer sheet.")
+        sheet_id = st.text_input("Google Sheet ID", value=CH_DB_SHEET_ID or GOOGLE_SHEET_ID)
+        sheet_range = st.text_input("Sheet Range", value="Sheet1")
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Export Leaderboard", width='stretch', type="primary"):
@@ -680,7 +680,7 @@ def render():
 
 
 def _do_export(sheet_id, sheet_range):
-    sid_val = sheet_id or GOOGLE_SHEET_ID
+    sid_val = sheet_id or CH_DB_SHEET_ID or GOOGLE_SHEET_ID
     if not sid_val:
         st.error("No sheet ID configured")
         return
