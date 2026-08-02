@@ -231,7 +231,7 @@ def _render_html_design(key_prefix, build_prompt, default_filename, label="HTML 
                 st.error(msg if msg else f"Design generation failed: {e}")
     html = st.session_state.get(html_key)
     if html:
-        components.html(html, height=640, scrolling=True)
+        components.html(html, height=900, scrolling=True)
         col_d, col_c = st.columns(2)
         col_d.download_button(
             "Download HTML",

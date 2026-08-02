@@ -173,32 +173,45 @@ def finalize_html(html, export_filename):
 
 def _export_tool_html(filename):
     jname = json.dumps(filename.rsplit(".", 1)[0] + ".jpeg")
+    # html-to-image renders via SVG foreignObject, which keeps native text
+    # shaping (correct Arabic). html2canvas can break Arabic letter joining.
+    fonts_link = (
+        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+        "family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700;800"
+        '&display=swap">'
+    )
     portrait_css = (
         "<style>"
         "#poster{box-sizing:border-box!important;max-width:1080px!important;"
-        "width:auto!important;margin:0 auto!important;min-height:1600px!important;}"
-        "html,body{margin:0!important;padding:0!important;}"
+        "width:auto!important;min-height:1920px!important;margin:0 auto!important;}"
+        "#poster,#poster *{font-family:'Cairo','Tajawal','Noto Naskh Arabic',"
+        "'Amiri','Segoe UI',Tahoma,sans-serif!important;}"
+        "html,body{margin:0!important;padding:0!important;background:#ffffff;}"
         "</style>"
     )
     return (
-        portrait_css
+        fonts_link
+        + portrait_css
         + '<div style="position:fixed;top:12px;right:12px;z-index:99999;direction:ltr;">'
         '<button id="export-jpeg" style="background:#1f77b4;color:#fff;border:none;'
         'padding:10px 16px;border-radius:8px;font-size:14px;cursor:pointer;'
         'font-family:Arial,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.3);">'
         'Export as JPEG</button>'
         "</div>"
-        '<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>'
+        '<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>'
         "<script>"
         'document.addEventListener("DOMContentLoaded",function(){'
         'var b=document.getElementById("export-jpeg");'
         'if(b){b.addEventListener("click",function(){'
         'var el=document.getElementById("poster")||document.body;'
-        'html2canvas(el,{scale:2,backgroundColor:"#ffffff"}).then(function(c){'
+        'if(typeof htmlToImage==="undefined"){alert("Export library failed to load. Check your internet connection.");return;}'
+        'document.fonts.ready.then(function(){'
+        'return htmlToImage.toJpeg(el,{pixelRatio:2,backgroundColor:"#ffffff",quality:0.95});'
+        "}).then(function(url){"
         'var a=document.createElement("a");'
         'a.download=' + jname + ";"
-        'a.href=c.toDataURL("image/jpeg",0.95);'
-        'document.body.appendChild(a);a.click();'
+        'a.href=url;document.body.appendChild(a);a.click();'
+        "}).catch(function(e){alert('Export failed: '+e.message);});"
         "});});}"
         "});"
         "</script>"
@@ -214,16 +227,20 @@ def _table_text(df):
 
 
 def _html_prompt(title, table):
-    return f"""أنشئ صفحة HTML كاملة ومستقلة (بدون أي مكتبات خارجية) لتصميم بوستر عمودي فاخر لمسابقة تحفيظ القرآن الكريم، مصمم للشاشات الطويلة (مثل منشورات السوشيال ميديا).
+    return f"""أنشئ صفحة HTML كاملة ومستقلة (بدون أي مكتبات خارجية) لتصميم بوستر عمودي فاخر لمسابقة تحفيظ القرآن الكريم، مصمم ليُعرض ويُصدَّر بصيغة مناسبة لشاشات الهواتف المحمولة (نسبة طولية مثل 9:16).
 
 المتطلبات:
 - كل التنسيقات داخل وسم <style> داخل الصفحة. يُسمح فقط بخطوط Google Fonts عبر <link> إن أردت.
 - التصميم باللغة العربية ومن اليمين إلى اليسار (dir="rtl").
-- التصميم عمودي (Portrait): العرض أضيق بكثير من الارتفاع، بنسبة تقارب 9:16 (مثال: 1080×1920).
-- اجعل محتوى التصميم كاملاً داخل وسم <div id="poster">...</div>، واجعله بعرض لا يزيد عن 1080px وبمركز الصفحة (margin: auto)، وبارتفاع لا يقل عن ضعف العرض تقريباً.
-- رتّب المحتوى عمودياً من الأعلى إلى الأسفل: العنوان الكبير في الأعلى، ثم البطاقات/الجدول في المنتصف، ثم الخاتمة أو الشعار في الأسفل، مع تباعد عمودي مريح بين الأقسام.
+- التصميم عمودي (Portrait) بنسبة شاشة هاتف تقارب 9:16 (مثال: 1080×1920).
+- اجعل محتوى التصميم كاملاً داخل وسم <div id="poster">...</div>، بعرض لا يزيد عن 1080px وبمركز الصفحة (margin: auto)، وبارتفاع لا يقل عن ضعف العرض.
+- التباعد والوضوح (الأهم): راعِ مسافات عمودية سخية وواضحة بين الأقسام والعناصر (لا تقل عن 30px)، بحيث يسهل قراءة البوستر وفهمه للطلاب.
+- استخدم خطوطاً عربية واضحة وحديثة (مثل Cairo أو Tajawal) بأحجام مريحة: العنوان الرئيسي كبير جداً (64-80px)، عناوين الأقسام 36-44px، أسماء الطلاب والنصوص 28-36px، والأرقام كبيرة وبارزة.
+- اجعل أسماء الطلاب والأرقام بارزة وسهلة القراءة، مع تباين قوي بين لون النص والخلفية، وخط ارتفاع مريح (line-height لا يقل عن 1.4).
+- أضف فواصل أو حدوداً خفيفة بين الصفوف/البطاقات لتوضيح البيانات.
+- رتّب المحتوى عمودياً من الأعلى إلى الأسفل: العنوان في الأعلى، ثم البطاقات/الجدول في المنتصف، ثم الخاتمة أو الشعار في الأسفل.
 - استخدم جماليات إسلامية أنيقة (أخضر وذهبي، زخارف هندسية خفيفة، تدرجات ناعمة، بطاقات حديثة).
-- اعرض البيانات التالية بدقة وبشكل واضح (جدول أو بطاقات أنيقة) مع الحفاظ على الأسماء والأرقام كما هي تماماً.
+- اعرض البيانات التالية بدقة وبشكل واضح مع الحفاظ على الأسماء والأرقام كما هي تماماً.
 - لا تضع أي نص أو عناصر خارج <div id="poster"> (لا شريط أدوات، لا أزرار، لا هوامش إضافية).
 - أخرج كود HTML فقط بدون أي تعليقات أو أسطر إضافية.
 
