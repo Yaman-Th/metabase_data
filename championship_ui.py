@@ -13,12 +13,11 @@ from sheets_client import send_to_sheet
 from gemini_design import (
     gemini_enabled,
     generate_poster,
-    generate_html,
     finalize_html,
+    render_leaderboard_html,
+    render_matches_html,
     build_leaderboard_prompt,
     build_matches_prompt,
-    build_leaderboard_html_prompt,
-    build_matches_html_prompt,
     friendly_error,
 )
 
@@ -297,35 +296,27 @@ def _render_poster(key_prefix, build_prompt, default_filename, label="AI Poster"
         )
 
 
-def _render_html_design(key_prefix, build_prompt, default_filename, label="HTML Design (Gemini)"):
+def _render_html_design(key_prefix, render_html, default_filename, label="HTML Design"):
     st.markdown(f"**{label}**")
-    if not gemini_enabled():
-        st.caption("Set `GEMINI_API_KEY` in Streamlit secrets to enable AI design generation.")
+    st.caption("Fixed design template — always the same, only the data updates.")
+    try:
+        html = finalize_html(render_html(), default_filename)
+    except Exception as e:
+        st.error(f"Design generation failed: {e}")
         return
-    html_key = f"{key_prefix}_html"
-    if st.button("Generate HTML design (Gemini)", key=f"{key_prefix}_html_btn"):
-        with st.spinner("Gemini is writing the design..."):
-            try:
-                raw = generate_html(build_prompt())
-                if raw and raw.strip():
-                    st.session_state[html_key] = finalize_html(raw, default_filename)
-                else:
-                    st.error("Gemini returned no content. Try again.")
-            except Exception as e:
-                msg = friendly_error(e)
-                st.error(msg if msg else f"Design generation failed: {e}")
-    html = st.session_state.get(html_key)
-    if html:
-        components.html(html, height=900, scrolling=True)
-        col_d, col_c = st.columns(2)
-        col_d.download_button(
-            "Download HTML",
-            data=html.encode("utf-8"),
-            file_name=default_filename,
-            mime="text/html",
-            key=f"{key_prefix}_html_dl",
-        )
-        col_c.caption("Open the HTML in a browser, then click **Export as JPEG** to save the design as an image.")
+    if not html:
+        st.info("No data yet")
+        return
+    components.html(html, height=900, scrolling=True)
+    col_d, col_c = st.columns(2)
+    col_d.download_button(
+        "Download HTML",
+        data=html.encode("utf-8"),
+        file_name=default_filename,
+        mime="text/html",
+        key=f"{key_prefix}_html_dl",
+    )
+    col_c.caption("Open the HTML in a browser, then click **Export as JPEG** to save the design as an image.")
 
 
 def _leaderboard_to_image(df, title="Leaderboard"):
@@ -646,9 +637,9 @@ def render():
                             )
                             _render_html_design(
                                 key_prefix=f"html_rnd_{rnd['id']}",
-                                build_prompt=lambda args=_matches_jpeg_args, rr=rnd: build_matches_html_prompt(args, rr["name"]),
+                                render_html=lambda args=_matches_jpeg_args, rr=rnd: render_matches_html(args, rr["name"]),
                                 default_filename=f"{rnd['name']}_design.html",
-                                label="HTML Design (free tier)",
+                                label="HTML Design",
                             )
                     else:
                         st.info("No matches yet.")
@@ -853,9 +844,9 @@ def render():
             )
             _render_html_design(
                 key_prefix="lb_html",
-                build_prompt=lambda: build_leaderboard_html_prompt(df, title="لوحة المتصدرين"),
+                render_html=lambda: render_leaderboard_html(df, title="لوحة المتصدرين"),
                 default_filename="leaderboard_design.html",
-                label="HTML Design (free tier)",
+                label="HTML Design",
             )
         else:
             st.info("No data yet")

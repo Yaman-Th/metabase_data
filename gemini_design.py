@@ -1,17 +1,16 @@
-"""Generate poster images from Championship data using the Gemini API.
+"""Poster generation for the Championship app.
 
-Requires a GEMINI_API_KEY secret (top-level or under a `secrets` table) and
-the `google-genai` package (added to requirements.txt). Uses the
-`gemini-2.5-flash-image` model which returns an inline image that the app can
-display and let the user download.
+Gemini image poster: `gemini-2.5-flash-image` returns an inline image the app
+displays and lets the user download (image models require billing).
 
-Also provides a free-tier fallback: `gemini-2.5-flash` (text) writes a
-self-contained, styled HTML poster whose page includes a button to export the
-design as JPEG (via html2canvas). Text generation works on the free tier, so
-this works even when image generation requires billing.
+HTML design: a FIXED, deterministic template (`render_leaderboard_html`,
+`render_matches_html`) so the design is always identical and only the data
+changes. `finalize_html` adds a button to export the design as JPEG via
+html-to-image.
 """
 
 import re
+import html
 import json
 import streamlit as st
 
@@ -118,30 +117,116 @@ def gemini_text_model():
     return _secret_value(("GEMINI_TEXT_MODEL",), ("secrets", "GEMINI_TEXT_MODEL")) or DEFAULT_TEXT_MODEL
 
 
-def generate_html(prompt):
-    """Ask the free-tier text model to write a standalone styled HTML poster."""
-    key = gemini_key()
-    if not key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is not set. Add it to Streamlit secrets to enable "
-            "AI design generation."
-        )
-    if not _HAS_GENAI:
-        raise RuntimeError(
-            "google-genai is not installed. Add it to requirements.txt and "
-            "redeploy."
-        )
+def _design_css():
+    return """
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#efe9d8}
+#poster{
+  background:
+    radial-gradient(circle at 50% -6%, rgba(212,175,55,.22), transparent 46%),
+    linear-gradient(180deg,#0b3d2e 0%,#0f4d38 32%,#f7f2e3 32%,#f7f2e3 100%);
+  color:#2c3a2c;padding:0 0 40px;
+}
+.top{padding:42px 44px 30px;color:#fff;text-align:center;position:relative}
+.top::before{content:"";position:absolute;inset:16px;border:2px solid rgba(212,175,55,.6);border-radius:18px;pointer-events:none}
+.top::after{content:"";position:absolute;inset:25px;border:1px dashed rgba(212,175,55,.45);border-radius:12px;pointer-events:none}
+.basmala{color:#e3c76a;font-size:30px;font-weight:700;margin-top:8px}
+.title{font-size:62px;font-weight:900;color:#fdf6e3;text-shadow:0 3px 10px rgba(0,0,0,.35);margin:12px 0 6px;line-height:1.2}
+.subtitle{font-size:28px;color:#cfe8d8;font-weight:600}
+.rule{width:240px;height:6px;margin:22px auto 0;background:linear-gradient(90deg,transparent,#e3c76a,transparent);border-radius:3px}
+.content{padding:32px 44px 16px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 14px 34px rgba(20,60,40,.18)}
+thead th{background:linear-gradient(90deg,#0f4d38,#14532d);color:#fdf6e3;font-size:21px;font-weight:700;padding:16px 10px}
+tbody td{padding:15px 10px;font-size:23px;text-align:center;border-bottom:1px solid #eee2c4;font-weight:600}
+tbody tr:nth-child(even){background:#fbf6e8}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(1) td{color:#8a6d0f;background:#fff6d9}
+tbody tr:nth-child(2) td{color:#4b5563;background:#f1f3f5}
+tbody tr:nth-child(3) td{color:#7c4d1b;background:#f7ead8}
+.match-card{background:#fff;border-radius:18px;box-shadow:0 14px 34px rgba(20,60,40,.16);padding:26px 28px;margin-bottom:24px;border-right:8px solid #c9a227}
+.match-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pitcher{flex:1;text-align:center}
+.pitcher .name{font-size:30px;font-weight:900;color:#123c2c}
+.pitcher .pages{font-size:26px;color:#c9a227;font-weight:700;margin-top:8px}
+.vs{font-size:28px;font-weight:900;color:#8aa89a;background:#f1f5f1;width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.match-result{margin-top:18px;background:#f6f9f4;border:1px dashed #c9dcc9;border-radius:12px;padding:12px;text-align:center;font-size:24px;font-weight:700;color:#14532d}
+.foot{padding:26px 0 10px;text-align:center;color:#7a8b7a;font-size:22px}
+.foot .orn{color:#c9a227;font-size:22px}
+"""
 
-    client = genai.Client(api_key=key)
-    response = client.models.generate_content(
-        model=gemini_text_model(),
-        contents=prompt,
-    )
-    text = response.text or ""
-    m = re.search(r"```(?:html)?\s*(.*?)```", text, re.DOTALL)
-    if m:
-        text = m.group(1).strip()
-    return text
+
+def _esc(v):
+    return html.escape(str(v), quote=True)
+
+
+def _fmt_num(v):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return _esc(v)
+    if f == int(f):
+        return f"{int(f):,}"
+    return f"{f:,.1f}"
+
+
+def _design_document(title, subtitle, content):
+    return f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700;800&display=swap">
+<style>
+{_design_css()}
+</style>
+</head>
+<body>
+<div id="poster">
+  <div class="top">
+    <div class="basmala">بسم الله الرحمن الرحيم</div>
+    <h1 class="title">{_esc(title)}</h1>
+    <p class="subtitle">{_esc(subtitle)}</p>
+    <div class="rule"></div>
+  </div>
+  <div class="content">
+  {content}
+  </div>
+  <div class="foot"><span class="orn">◆</span> وفق الله الجميع <span class="orn">◆</span></div>
+</div>
+</body>
+</html>
+"""
+
+
+def render_leaderboard_html(df, title="لوحة المتصدرين"):
+    """Fixed, deterministic leaderboard poster from a DataFrame."""
+    thead = "".join(f"<th>{_esc('الترتيب' if c == '#' else c)}</th>" for c in df.columns)
+    rows = []
+    for _, row in df.iterrows():
+        tds = "".join(f"<td>{_fmt_num(v)}</td>" for v in row.tolist())
+        rows.append(f"<tr>{tds}</tr>")
+    table = f'<table><thead><tr>{thead}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
+    return _design_document(title, "لوحة المتصدرين", table)
+
+
+def render_matches_html(matches, round_name):
+    """Fixed, deterministic matches poster from a list of match dicts."""
+    cards = []
+    for m in matches:
+        cards.append(
+            '<div class="match-card">'
+            '<div class="match-head">'
+            f'<div class="pitcher"><div class="name">{_esc(m["s1"])}</div>'
+            f'<div class="pages">{_fmt_num(m["pages1"])}</div></div>'
+            '<div class="vs">ضد</div>'
+            f'<div class="pitcher"><div class="name">{_esc(m["s2"])}</div>'
+            f'<div class="pages">{_fmt_num(m["pages2"])}</div></div>'
+            "</div>"
+            f'<div class="match-result">النتيجة: {_esc(m["result_text"])} • '
+            f'النقاط: {_fmt_num(m["points1"])} - {_fmt_num(m["points2"])}</div>'
+            "</div>"
+        )
+    return _design_document(round_name, "مواجهات المسابقة", "\n".join(cards))
 
 
 def finalize_html(html, export_filename):
@@ -216,54 +301,6 @@ def _export_tool_html(filename):
         "});"
         "</script>"
     )
-
-
-def _table_text(df):
-    headers = [str(c) for c in df.columns]
-    lines = [" | ".join(headers)]
-    for _, row in df.iterrows():
-        lines.append(" | ".join("" if v is None else str(v) for v in row.tolist()))
-    return "\n".join(lines)
-
-
-def _html_prompt(title, table):
-    return f"""أنشئ صفحة HTML كاملة ومستقلة (بدون أي مكتبات خارجية) لتصميم بوستر عمودي فاخر لمسابقة تحفيظ القرآن الكريم، مصمم ليُعرض ويُصدَّر بصيغة مناسبة لشاشات الهواتف المحمولة (نسبة طولية مثل 9:16).
-
-المتطلبات:
-- كل التنسيقات داخل وسم <style> داخل الصفحة. يُسمح فقط بخطوط Google Fonts عبر <link> إن أردت.
-- التصميم باللغة العربية ومن اليمين إلى اليسار (dir="rtl").
-- التصميم عمودي (Portrait) بنسبة شاشة هاتف تقارب 9:16 (مثال: 1080×1920).
-- اجعل محتوى التصميم كاملاً داخل وسم <div id="poster">...</div>، بعرض لا يزيد عن 1080px وبمركز الصفحة (margin: auto)، وبارتفاع لا يقل عن ضعف العرض.
-- التباعد والوضوح (الأهم): راعِ مسافات عمودية سخية وواضحة بين الأقسام والعناصر (لا تقل عن 30px)، بحيث يسهل قراءة البوستر وفهمه للطلاب.
-- استخدم خطوطاً عربية واضحة وحديثة (مثل Cairo أو Tajawal) بأحجام مريحة: العنوان الرئيسي كبير جداً (64-80px)، عناوين الأقسام 36-44px، أسماء الطلاب والنصوص 28-36px، والأرقام كبيرة وبارزة.
-- اجعل أسماء الطلاب والأرقام بارزة وسهلة القراءة، مع تباين قوي بين لون النص والخلفية، وخط ارتفاع مريح (line-height لا يقل عن 1.4).
-- أضف فواصل أو حدوداً خفيفة بين الصفوف/البطاقات لتوضيح البيانات.
-- رتّب المحتوى عمودياً من الأعلى إلى الأسفل: العنوان في الأعلى، ثم البطاقات/الجدول في المنتصف، ثم الخاتمة أو الشعار في الأسفل.
-- استخدم جماليات إسلامية أنيقة (أخضر وذهبي، زخارف هندسية خفيفة، تدرجات ناعمة، بطاقات حديثة).
-- اعرض البيانات التالية بدقة وبشكل واضح مع الحفاظ على الأسماء والأرقام كما هي تماماً.
-- لا تضع أي نص أو عناصر خارج <div id="poster"> (لا شريط أدوات، لا أزرار، لا هوامش إضافية).
-- أخرج كود HTML فقط بدون أي تعليقات أو أسطر إضافية.
-
-عنوان البوستر: "{title}"
-
-البيانات:
-{table}
-"""
-
-
-def build_leaderboard_html_prompt(df, title="لوحة المتصدرين"):
-    return _html_prompt(title, _table_text(df))
-
-
-def build_matches_html_prompt(matches, round_name):
-    lines = []
-    for m in matches:
-        lines.append(
-            f"{m['s1']} ضد {m['s2']} | صفحات: {m['pages1']:.1f} مقابل "
-            f"{m['pages2']:.1f} | النتيجة: {m['result_text']} | نقاط: "
-            f"{m['points1']} مقابل {m['points2']}"
-        )
-    return _html_prompt(round_name, "\n".join(lines))
 
 
 def _prompt(title, table):
