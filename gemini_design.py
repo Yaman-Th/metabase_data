@@ -14,6 +14,7 @@ import re
 import os
 import html
 import json
+import base64
 import streamlit as st
 
 try:
@@ -273,6 +274,8 @@ def finalize_html(html, export_filename):
     if not html or not html.strip():
         return ""
 
+    html = _inject_embedded_fonts(html)
+
     if 'id="poster"' not in html and "id='poster'" not in html:
         html = re.sub(
             r"<body([^>]*)>(.*?)</body>",
@@ -309,6 +312,86 @@ def _html_to_image_lib():
         except Exception:
             _HTML_TO_IMAGE_LIB = ""
     return _HTML_TO_IMAGE_LIB
+
+
+_FONT_DIR = os.path.join(os.path.dirname(__file__), "assets", "fonts")
+
+_ARABIC_RANGE = (
+    "U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, "
+    "U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, "
+    "U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4, "
+    "U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24, "
+    "U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, "
+    "U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, "
+    "U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64, "
+    "U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E, "
+    "U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1"
+)
+
+_LATIN_RANGE = (
+    "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, "
+    "U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, "
+    "U+2212, U+2215, U+FEFF, U+FFFD"
+)
+
+# (family, style, weight, subset, unicode-range, font file). Cairo and Reem Kufi
+# are variable fonts (one file covers the full weight range); Amiri ships
+# per-weight files. Embedded as base64 so exports rasterize the exact shapes
+# even though html-to-image cannot read the cross-origin Google Fonts sheet.
+_FONT_SPEC = [
+    ("Amiri", "normal", "400", _ARABIC_RANGE, "J7aRnpd8CGxBHpUrtLMA7w.woff2"),
+    ("Amiri", "normal", "400", _LATIN_RANGE, "J7aRnpd8CGxBHpUutLM.woff2"),
+    ("Amiri", "normal", "700", _ARABIC_RANGE, "J7acnpd8CGxBHp2VkaY6zp5yGw.woff2"),
+    ("Amiri", "normal", "700", _LATIN_RANGE, "J7acnpd8CGxBHp2VkaY_zp4.woff2"),
+    ("Amiri", "italic", "400", _ARABIC_RANGE, "J7afnpd8CGxBHpUrhLQY66NL.woff2"),
+    ("Amiri", "italic", "400", _LATIN_RANGE, "J7afnpd8CGxBHpUrhLEY6w.woff2"),
+    ("Cairo", "normal", "300 800", _ARABIC_RANGE, "SLXVc1nY6HkvangtZmpQdkhzfH5lkSscQyyS4J0.woff2"),
+    ("Cairo", "normal", "300 800", _LATIN_RANGE, "SLXVc1nY6HkvangtZmpQdkhzfH5lkSscRiyS.woff2"),
+    ("Reem Kufi", "normal", "400 700", _ARABIC_RANGE, "2sDcZGJLip7W2J7v7wQzbWW5O7w.woff2"),
+    ("Reem Kufi", "normal", "400 700", _LATIN_RANGE, "2sDcZGJLip7W2J7v7wQzaGW5.woff2"),
+]
+
+_FONT_CSS = None
+
+
+def _font_face_css():
+    """Base64 @font-face rules for the poster fonts (Amiri/Cairo/Reem Kufi)."""
+    global _FONT_CSS
+    if _FONT_CSS is not None:
+        return _FONT_CSS
+    rules = []
+    for family, style, weight, urange, fname in _FONT_SPEC:
+        path = os.path.join(_FONT_DIR, fname)
+        try:
+            with open(path, "rb") as f:
+                data = base64.b64encode(f.read()).decode("ascii")
+        except Exception:
+            continue
+        rules.append(
+            "@font-face{font-family:'%s';font-style:%s;font-weight:%s;"
+            "font-display:swap;src:url(data:font/woff2;base64,%s) format('woff2');"
+            "unicode-range:%s;}" % (family, style, weight, data, urange)
+        )
+    _FONT_CSS = "<style>" + "".join(rules) + "</style>"
+    return _FONT_CSS
+
+
+def _inject_embedded_fonts(html):
+    """Replace the Google Fonts <link> tags with embedded base64 @font-face.
+
+    Removes the cross-origin stylesheet dependency so html-to-image (and the
+    standalone HTML) always rasterizes the correct Amiri/Cairo/Reem Kufi glyphs.
+    """
+    html = re.sub(r"<link[^>]*fonts\.googleapis\.com[^>]*/?>", "", html, flags=re.I)
+    html = re.sub(r"<link[^>]*fonts\.gstatic\.com[^>]*/?>", "", html, flags=re.I)
+    html = re.sub(r"<link[^>]*rel=[\"']preconnect[\"'][^>]*/?>", "", html, flags=re.I)
+    fontcss = _font_face_css()
+    if fontcss:
+        if "</head>" in html:
+            html = html.replace("</head>", fontcss + "</head>")
+        else:
+            html = fontcss + html
+    return html
 
 
 def _export_tool_html(filename):
