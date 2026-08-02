@@ -147,6 +147,8 @@ tbody tr:nth-child(3) td{color:#7c4d1b;background:#f7ead8}
 .match-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .pitcher{flex:1;text-align:center}
 .pitcher .name{font-size:30px;font-weight:900;color:#123c2c}
+.pitcher .name.win{color:#c9a227;text-shadow:0 2px 8px rgba(201,162,39,.4)}
+.pitcher .star{font-size:24px;margin-left:6px;color:#e3c76a}
 .pitcher .pages{font-size:26px;color:#c9a227;font-weight:700;margin-top:8px}
 .vs{font-size:28px;font-weight:900;color:#8aa89a;background:#f1f5f1;width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .match-result{margin-top:18px;background:#f6f9f4;border:1px dashed #c9dcc9;border-radius:12px;padding:12px;text-align:center;font-size:24px;font-weight:700;color:#14532d}
@@ -209,21 +211,30 @@ def render_leaderboard_html(df, title="لوحة المتصدرين"):
     return _design_document(title, "لوحة المتصدرين", table)
 
 
+def _pitcher(name, pages, winner):
+    star = '<span class="star">★</span>' if winner else ""
+    cls = " win" if winner else ""
+    return (
+        f'<div class="pitcher"><div class="name{cls}">{star}{_esc(name)}</div>'
+        f'<div class="pages">{_fmt_num(pages)}</div></div>'
+    )
+
+
 def render_matches_html(matches, round_name):
     """Fixed, deterministic matches poster from a list of match dicts."""
     cards = []
     for m in matches:
+        p1 = m["points1"]
+        p2 = m["points2"]
         cards.append(
             '<div class="match-card">'
             '<div class="match-head">'
-            f'<div class="pitcher"><div class="name">{_esc(m["s1"])}</div>'
-            f'<div class="pages">{_fmt_num(m["pages1"])}</div></div>'
+            f'{_pitcher(m["s1"], m["pages1"], p1 > p2)}'
             '<div class="vs">ضد</div>'
-            f'<div class="pitcher"><div class="name">{_esc(m["s2"])}</div>'
-            f'<div class="pages">{_fmt_num(m["pages2"])}</div></div>'
+            f'{_pitcher(m["s2"], m["pages2"], p2 > p1)}'
             "</div>"
             f'<div class="match-result">النتيجة: {_esc(m["result_text"])} • '
-            f'النقاط: {_fmt_num(m["points1"])} - {_fmt_num(m["points2"])}</div>'
+            f'النقاط: {_fmt_num(p1)} - {_fmt_num(p2)}</div>'
             "</div>"
         )
     return _design_document(round_name, "مواجهات المسابقة", "\n".join(cards))
