@@ -8,4 +8,6 @@ google-api-python-client
 matplotlib
 arabic-reshaper
 python-bidi
+plotly
+kaleido
 google-genai

@@ -32,6 +32,13 @@ except Exception:
     _HAS_MPL = False
 
 try:
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    _HAS_PLOTLY = True
+except Exception:
+    _HAS_PLOTLY = False
+
+try:
     import arabic_reshaper
     from bidi.algorithm import get_display
     _HAS_ARABIC_SHAPE = True
@@ -41,6 +48,10 @@ except Exception:
 _ARABIC_FP = None
 _INITED_MPL = False
 _MPL_NATIVE_SHAPING = None
+
+# Font used for Plotly pie charts. On Linux (Streamlit Cloud, fonts-noto package)
+# Noto Naskh Arabic is available; on Windows use Arial which includes Arabic glyphs.
+_PIE_FONT = "Noto Naskh Arabic" if (os.name == "posix") else "Arial"
 
 _ARABIC_RANGES = (
     (0x0600, 0x06FF),  # Arabic
@@ -179,46 +190,77 @@ def _fig_to_jpeg(fig):
     return buf.getvalue()
 
 
-def _target_pie_chart(achieved, target, title, color):
-    if not _HAS_MPL:
+def _target_pie_fig(achieved, target, title, color):
+    if not _HAS_PLOTLY:
         return None
-    _init_mpl_font()
     achieved_c = max(min(achieved, target), 0.0)
     remaining = max(target - achieved_c, 0.0)
     pct = (achieved / target * 100.0) if target else 0.0
 
-    fig, ax = plt.subplots(figsize=(5.2, 4.6))
-    labels = [
-        f"{_shape_arabic('تحقق')} {achieved_c:,.0f}",
-        f"{_shape_arabic('متبقٍ')} {remaining:,.0f}",
-    ]
-    wedges, texts, autotexts = ax.pie(
-        [achieved_c, remaining],
-        colors=[color, "#d9d9d9"],
-        startangle=90,
-        counterclock=False,
-        labels=labels,
-        autopct=lambda p: f"{p:.0f}%" if p > 0 else "",
-        pctdistance=0.72,
-        labeldistance=1.08,
+    fig = go.Figure(go.Pie(
+        labels=[f"تحقق {achieved_c:,.0f}", f"متبقٍ {remaining:,.0f}"],
+        values=[achieved_c, remaining],
+        hole=0.45,
+        marker=dict(colors=[color, "#d9d9d9"]),
+        textinfo="label+percent",
+        textfont=dict(size=13, family=_PIE_FONT),
+        insidetextorientation="horizontal",
+        hovertemplate="%{label}: %{value:,.1f}<extra></extra>",
+    ))
+    fig.update_layout(
+        title=f"{title}: {achieved_c:,.0f} / {target:,.0f} ({pct:.0f}%)",
+        title_font=dict(size=15, family=_PIE_FONT),
+        font=dict(family=_PIE_FONT),
+        height=360,
+        margin=dict(l=10, r=10, t=60, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
     )
-    for t in texts:
-        if _ARABIC_FP is not None:
-            t.set_fontproperties(_ARABIC_FP)
-        t.set_fontsize(11)
-    for at in autotexts:
-        if _ARABIC_FP is not None:
-            at.set_fontproperties(_ARABIC_FP)
-        at.set_fontsize(10)
-        at.set_color("white")
-    ax.set_title(
-        _shape_arabic(f"{title}: {achieved_c:,.0f} / {target:,.0f} ({pct:.0f}%)"),
-        fontproperties=_ARABIC_FP,
-        fontsize=13,
-        pad=16,
+    return fig
+
+
+def _combined_pie_fig(fig1, fig2):
+    t1 = fig1.layout.title.text if fig1.layout.title else ""
+    t2 = fig2.layout.title.text if fig2.layout.title else ""
+    fig = make_subplots(
+        rows=1, cols=2,
+        specs=[[{"type": "pie"}, {"type": "pie"}]],
+        subplot_titles=[t1, t2],
     )
-    ax.axis("equal")
-    return _fig_to_jpeg(fig)
+    fig.add_trace(fig1.data[0], row=1, col=1)
+    fig.add_trace(fig2.data[0], row=1, col=2)
+    fig.update_layout(
+        font=dict(family=_PIE_FONT),
+        height=400,
+        margin=dict(l=10, r=10, t=60, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+    )
+    fig.update_annotations(font=dict(size=13, family=_PIE_FONT))
+    return fig
+
+
+def _fig_to_png_bytes(fig, width=920, scale=2):
+    try:
+        height = int(fig.layout.height or 400)
+        return fig.to_image(format="png", width=width, height=height, scale=scale)
+    except Exception:
+        return None
+
+
+def _pie_export_controls(fig, filename, prefix):
+    if not _HAS_PLOTLY:
+        return
+    if st.button("Export PNG", key=f"{prefix}_gen"):
+        png = _fig_to_png_bytes(fig)
+        if png:
+            st.session_state[f"{prefix}_png"] = png
+        else:
+            st.session_state.pop(f"{prefix}_png", None)
+            st.warning("PNG export is unavailable here (kaleido not installed). Use the chart's camera button.")
+    png = st.session_state.get(f"{prefix}_png")
+    if png:
+        st.download_button("Download PNG", data=png, file_name=filename, mime="image/png", key=f"{prefix}_dl")
 
 
 def _render_poster(key_prefix, build_prompt, default_filename, label="AI Poster"):
@@ -885,27 +927,23 @@ def render():
             st.divider()
             tgt = stats["target"]
             st.markdown(f"**3) Target progress** (static period: {dashboard.TARGET_START} → {dashboard.TARGET_END})")
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                img1 = _target_pie_chart(tgt["tikrar_achieved"], tgt["tikrar_target"], "التكرار", "#2ca02c")
-                if img1:
-                    st.image(img1)
-                    st.download_button(
-                        "Download Tikrar chart", data=img1, file_name="tikrar_target.png",
-                        mime="image/png", key="dash_dl_p1",
-                    )
-                else:
-                    st.info("matplotlib not available")
-            with col_p2:
-                img2 = _target_pie_chart(tgt["jadeed_achieved"], tgt["jadeed_target"], "الجديد", "#1f77b4")
-                if img2:
-                    st.image(img2)
-                    st.download_button(
-                        "Download Jadeed chart", data=img2, file_name="jadeed_target.png",
-                        mime="image/png", key="dash_dl_p2",
-                    )
-                else:
-                    st.info("matplotlib not available")
+            fig1 = _target_pie_fig(tgt["tikrar_achieved"], tgt["tikrar_target"], "التكرار", "#2ca02c")
+            fig2 = _target_pie_fig(tgt["jadeed_achieved"], tgt["jadeed_target"], "الجديد", "#1f77b4")
+            if fig1 is None or fig2 is None:
+                st.info("plotly not available")
+            else:
+                col_p1, col_p2 = st.columns(2)
+                with col_p1:
+                    st.plotly_chart(fig1, width='stretch')
+                    _pie_export_controls(fig1, "tikrar_target.png", "dash_p1")
+                with col_p2:
+                    st.plotly_chart(fig2, width='stretch')
+                    _pie_export_controls(fig2, "jadeed_target.png", "dash_p2")
+
+                st.markdown("**Combined view (both charts in one image)**")
+                fig_all = _combined_pie_fig(fig1, fig2)
+                st.plotly_chart(fig_all, width='stretch')
+                _pie_export_controls(fig_all, "targets_combined.png", "dash_all")
 
     # =========================================================
     # TAB 6: EXPORT
