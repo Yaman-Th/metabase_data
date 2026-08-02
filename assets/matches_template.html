@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>مسابقة تحفيظ القرآن الكريم - {{ROUND_NAME}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@300;400;500;600;700;800&family=Reem+Kufi:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 40px 0;
+            background-color: #020b08;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Cairo', sans-serif;
+            overflow-x: hidden;
+        }
+        #poster {
+            width: 1080px;
+            height: 1920px;
+            background-color: #04231c;
+            background-image: 
+                radial-gradient(circle at 50% 30%, #0c4d3f 0%, #041c16 80%),
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M40 0l10 30 30 10-30 10-10 30-10-30-30-10 30-10z' fill='%23d4af37' fill-opacity='0.025'/%3E%3C/svg%3E");
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 100px 80px;
+            box-shadow: 0 35px 70px rgba(0, 0, 0, 0.7);
+            overflow: hidden;
+        }
+        
+        /* Premium Islamic Outer Border and Frames */
+        #poster::after {
+            content: '';
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            right: 30px;
+            bottom: 30px;
+            border: 3px solid #d4af37;
+            pointer-events: none;
+            opacity: 0.9;
+            z-index: 2;
+        }
+        #poster::before {
+            content: '';
+            position: absolute;
+            top: 42px;
+            left: 42px;
+            right: 42px;
+            bottom: 42px;
+            border: 1.5px solid rgba(212, 175, 55, 0.4);
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* Luxury Corners */
+        .corner-decoration {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border: 4px solid #d4af37;
+            z-index: 10;
+        }
+        .corner-decoration::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: #d4af37;
+            transform: rotate(45deg);
+        }
+        .corner-decoration.tl { top: 38px; left: 38px; border-right: none; border-bottom: none; }
+        .corner-decoration.tl::after { top: -8px; left: -8px; }
+        .corner-decoration.tr { top: 38px; right: 38px; border-left: none; border-bottom: none; }
+        .corner-decoration.tr::after { top: -8px; right: -8px; }
+        .corner-decoration.bl { bottom: 38px; left: 38px; border-right: none; border-top: none; }
+        .corner-decoration.bl::after { bottom: -8px; left: -8px; }
+        .corner-decoration.br { bottom: 38px; right: 38px; border-left: none; border-top: none; }
+        .corner-decoration.br::after { bottom: -8px; right: -8px; }
+
+        /* Glowing atmospheric highlights */
+        .glow-circle {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(13, 77, 63, 0.35) 0%, rgba(13, 77, 63, 0) 70%);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .glow-1 { top: 10%; left: -200px; }
+        .glow-2 { bottom: 10%; right: -200px; }
+
+        /* Header Area */
+        .header {
+            text-align: center;
+            z-index: 5;
+            width: 100%;
+        }
+        .header-logo {
+            font-family: 'Reem Kufi', sans-serif;
+            color: #d4af37;
+            font-size: 22px;
+            letter-spacing: 6px;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+        .header-logo::before, .header-logo::after {
+            content: " ✦ ";
+            color: #f3e5ab;
+        }
+        .main-title {
+            font-family: 'Amiri', serif;
+            font-size: 76px;
+            font-weight: 700;
+            color: #ffffff;
+            background: linear-gradient(to bottom, #ffffff 40%, #e6be4e 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0 0 15px 0;
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));
+        }
+        .header-ornament {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 5px;
+        }
+        .header-ornament .line {
+            width: 120px;
+            height: 1px;
+            background: linear-gradient(to right, rgba(212, 175, 55, 0), rgba(212, 175, 55, 0.8), rgba(212, 175, 55, 0));
+        }
+        .header-ornament .diamond {
+            width: 10px;
+            height: 10px;
+            background: #d4af37;
+            transform: rotate(45deg);
+        }
+
+        /* Matches Grid */
+        .matches-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            margin: auto 0;
+            z-index: 5;
+        }
+
+        /* Elegant Match Card Styling */
+        .match-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, rgba(13, 77, 63, 0.45) 0%, rgba(5, 33, 27, 0.7) 100%);
+            border: 1.5px solid rgba(212, 175, 55, 0.25);
+            border-radius: 20px;
+            padding: 22px 40px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        .match-card::before {
+            content: '';
+            position: absolute;
+            top: 5px; left: 5px; right: 5px; bottom: 5px;
+            border: 1px solid rgba(212, 175, 55, 0.08);
+            border-radius: 15px;
+            pointer-events: none;
+        }
+        .match-card:hover {
+            border-color: rgba(212, 175, 55, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 15px 45px rgba(0, 0, 0, 0.45);
+        }
+
+        /* Competitor Details */
+        .competitor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .competitor.right-side {
+            align-items: flex-start;
+            text-align: right;
+        }
+        .competitor.left-side {
+            align-items: flex-end;
+            text-align: left;
+        }
+
+        /* Player Typography */
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .player-name {
+            font-size: 26px;
+            font-weight: 600;
+            color: #d1e2de;
+            margin: 0;
+        }
+        .winner .player-name {
+            color: #ffffff;
+            font-weight: 800;
+            background: linear-gradient(to left, #ffffff, #f7ebb8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .competitor.left-side.winner .player-name {
+            background: linear-gradient(to right, #ffffff, #f7ebb8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Star indicators for winners */
+        .winner-star {
+            color: #d4af37;
+            filter: drop-shadow(0 0 5px #d4af37);
+            font-size: 22px;
+            margin: 0 6px;
+        }
+
+        /* Stats badging */
+        .player-stats {
+            display: flex;
+            gap: 14px;
+            margin-top: 10px;
+        }
+        .stat-badge {
+            padding: 4px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .stat-badge.pages {
+            background: rgba(13, 77, 63, 0.6);
+            border: 1px solid rgba(143, 174, 168, 0.3);
+        }
+        .stat-badge.points {
+            background: rgba(212, 175, 55, 0.12);
+            border: 1px solid rgba(212, 175, 55, 0.35);
+        }
+        .label {
+            color: #8faea8;
+            font-weight: 400;
+        }
+        .val {
+            color: #ffffff;
+            font-weight: 700;
+        }
+        .winner .stat-badge.points .val {
+            color: #ffd863;
+        }
+
+        /* Central Versus divider */
+        .vs-badge {
+            width: 55px;
+            height: 55px;
+            background: linear-gradient(135deg, #d4af37 0%, #aa7c11 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Reem Kufi', sans-serif;
+            font-weight: bold;
+            color: #04231c;
+            font-size: 19px;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.45);
+            margin: 0 30px;
+            flex-shrink: 0;
+            z-index: 5;
+        }
+
+        /* Footer Area */
+        .footer {
+            text-align: center;
+            z-index: 5;
+            width: 100%;
+        }
+        .quran-verse {
+            font-family: 'Amiri', serif;
+            font-size: 34px;
+            color: #f3e5ab;
+            margin-bottom: 15px;
+            text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+            font-weight: bold;
+        }
+        .footer-sub {
+            font-family: 'Cairo', sans-serif;
+            font-size: 18px;
+            color: #8faea8;
+            letter-spacing: 3px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="poster">
+        <!-- Atmospheric glows -->
+        <div class="glow-circle glow-1"></div>
+        <div class="glow-circle glow-2"></div>
+
+        <!-- Corner Ornaments -->
+        <div class="corner-decoration tl"></div>
+        <div class="corner-decoration tr"></div>
+        <div class="corner-decoration bl"></div>
+        <div class="corner-decoration br"></div>
+
+        <!-- Header -->
+        <div class="header">
+            <div class="header-logo">مُسَابَقَةُ تَحْفِيظِ القُرْآنِ الكَرِيمِ</div>
+            <h1 class="main-title">{{ROUND_NAME}}</h1>
+            <div class="header-ornament">
+                <div class="line"></div>
+                <div class="diamond"></div>
+                <div class="line"></div>
+            </div>
+        </div>
+
+        <!-- Matches Container -->
+        <div class="matches-container">
+{{MATCH_CARDS}}
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="header-ornament" style="margin-bottom: 25px;">
+                <div class="line" style="width: 180px;"></div>
+                <div class="diamond"></div>
+                <div class="line" style="width: 180px;"></div>
+            </div>
+            <div class="quran-verse">« وَفِي ذَٰلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ »</div>
+            <div class="footer-sub">مُسَابَقَةُ تَرْتِيلِ الوَحْيَيْنِ العَطِرَةِ</div>
+        </div>
+
+    </div>
+
+</body>
+</html>

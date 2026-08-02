@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>{{TITLE}} - مسابقة تحفيظ القرآن الكريم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #03120c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Cairo', sans-serif;
+            overflow-x: hidden;
+        }
+        #poster {
+            width: 1080px;
+            height: 1920px;
+            position: relative;
+            background-color: #041a12;
+            background-image: 
+                radial-gradient(circle at 50% 30%, #0a3d2b 0%, #041a12 70%),
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%23d4af37' fill-opacity='0.03'%3E%3Cpath d='M40 0 L80 40 L40 80 L0 40 Z M40 10 L70 40 L40 70 L10 40 Z'/%3E%3C/g%3E%3C/svg%3E");
+            box-shadow: 0 0 80px rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 90px 60px;
+            border: 4px solid #d4af37;
+            outline: 20px solid #041a12;
+            outline-offset: -24px;
+            overflow: hidden;
+        }
+        #poster::before {
+            content: '';
+            position: absolute;
+            top: 30px;
+            bottom: 30px;
+            left: 30px;
+            right: 30px;
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            pointer-events: none;
+        }
+        .corner-design {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border: 3px solid #d4af37;
+            pointer-events: none;
+        }
+        .top-right {
+            top: 25px;
+            right: 25px;
+            border-bottom: none;
+            border-left: none;
+        }
+        .top-left {
+            top: 25px;
+            left: 25px;
+            border-bottom: none;
+            border-right: none;
+        }
+        .bottom-right {
+            bottom: 25px;
+            right: 25px;
+            border-top: none;
+            border-left: none;
+        }
+        .bottom-left {
+            bottom: 25px;
+            left: 25px;
+            border-top: none;
+            border-right: none;
+        }
+        .header-section {
+            text-align: center;
+            width: 100%;
+            z-index: 2;
+        }
+        .bismillah {
+            font-family: 'Amiri', serif;
+            font-size: 28px;
+            color: #d4af37;
+            letter-spacing: 2px;
+            margin-bottom: 25px;
+            opacity: 0.9;
+        }
+        .title-container {
+            position: relative;
+            display: inline-block;
+            padding: 15px 60px;
+            margin-bottom: 20px;
+        }
+        .title-container::before, .title-container::after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 100%;
+            border: 2px solid #d4af37;
+            top: 0;
+        }
+        .title-container::before {
+            left: 0;
+            border-right: none;
+        }
+        .title-container::after {
+            right: 0;
+            border-left: none;
+        }
+        .main-title {
+            font-family: 'Amiri', serif;
+            font-size: 72px;
+            font-weight: 700;
+            color: #ffffff;
+            text-shadow: 0 4px 15px rgba(0, 0, 0, 0.6), 0 0 20px rgba(212, 175, 55, 0.4);
+            line-height: 1.2;
+        }
+        .subtitle {
+            font-size: 24px;
+            font-weight: 400;
+            color: #d4af37;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            margin-top: 10px;
+        }
+        .divider {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 25px auto;
+            width: 60%;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #d4af37, transparent);
+        }
+        .divider-flower {
+            font-size: 24px;
+            color: #d4af37;
+            margin: 0 15px;
+        }
+        .table-container {
+            width: 100%;
+            background: rgba(4, 26, 18, 0.8);
+            border: 1px solid rgba(212, 175, 55, 0.25);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+            z-index: 2;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: center;
+        }
+        th {
+            font-size: 18px;
+            font-weight: 700;
+            color: #d4af37;
+            padding: 18px 10px;
+            border-bottom: 2px solid rgba(212, 175, 55, 0.4);
+            font-family: 'Cairo', sans-serif;
+        }
+        td {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e0e0e0;
+            padding: 16px 10px;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.1);
+            transition: all 0.3s ease;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        .rank {
+            font-family: 'Amiri', serif;
+            font-size: 22px;
+            font-weight: 700;
+            width: 60px;
+        }
+        .rank-1 { color: #ffd700; text-shadow: 0 0 10px rgba(255,215,0,0.4); }
+        .rank-2 { color: #c0c0c0; text-shadow: 0 0 10px rgba(192,192,192,0.4); }
+        .rank-3 { color: #cd7f32; text-shadow: 0 0 10px rgba(205,127,50,0.4); }
+        
+        .name-col {
+            text-align: right;
+            font-weight: 700;
+            padding-right: 20px;
+            color: #ffffff;
+        }
+        .points-badge {
+            background: linear-gradient(135deg, #d4af37, #aa7c11);
+            color: #041a12;
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 17px;
+            display: inline-block;
+            box-shadow: 0 4px 10px rgba(212, 175, 55, 0.2);
+        }
+        .top-row-1 { background: rgba(212, 175, 55, 0.08); }
+        .top-row-2 { background: rgba(192, 192, 192, 0.05); }
+        .top-row-3 { background: rgba(205, 127, 50, 0.04); }
+        
+        .total-highlight {
+            color: #d4af37;
+            font-weight: 700;
+        }
+        
+        .footer-section {
+            text-align: center;
+            width: 100%;
+            z-index: 2;
+        }
+        .quran-verse {
+            font-family: 'Amiri', serif;
+            font-size: 32px;
+            font-style: italic;
+            color: #d4af37;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        .footer-logo {
+            font-size: 16px;
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="poster">
+        <div class="corner-design top-right"></div>
+        <div class="corner-design top-left"></div>
+        <div class="corner-design bottom-right"></div>
+        <div class="corner-design bottom-left"></div>
+
+        <div class="header-section">
+            <div class="bismillah">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+            <div class="title-container">
+                <div class="main-title">{{TITLE}}</div>
+            </div>
+            <div class="subtitle">مسابقة تحفيظ القرآن الكريم الكبرى</div>
+            <div class="divider">
+                <span class="divider-flower">❖</span>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th class="name-col">الاسم</th>
+                        <th>النقاط</th>
+                        <th>جديد</th>
+                        <th>تكرار</th>
+                        <th>المجموع</th>
+                        <th>الأيام</th>
+                        <th>فوز</th>
+                        <th>تعادل</th>
+                        <th>خسارة</th>
+                    </tr>
+                </thead>
+                <tbody>
+{{LB_ROWS}}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer-section">
+            <div class="quran-verse">"وَفِي ذَٰلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ"</div>
+            <div class="footer-logo">اللجنة التنظيمية للمسابقة</div>
+        </div>
+    </div>
+
+</body>
+</html>
