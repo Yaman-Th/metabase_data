@@ -10,6 +10,7 @@ html-to-image.
 """
 
 import re
+import os
 import html
 import json
 import streamlit as st
@@ -233,18 +234,18 @@ def render_matches_html(matches, round_name):
             '<div class="vs">ضد</div>'
             f'{_pitcher(m["s2"], m["pages2"], p2 > p1)}'
             "</div>"
-            f'<div class="match-result">النتيجة: {_esc(m["result_text"])} • '
-            f'النقاط: {_fmt_num(p1)} - {_fmt_num(p2)}</div>'
+            f'<div class="match-result">النتيجة: {_esc(m["result_text"])}</div>'
             "</div>"
         )
     return _design_document(round_name, "مواجهات المسابقة", "\n".join(cards))
 
 
 def finalize_html(html, export_filename):
-    """Make Gemini's HTML self-contained and add the 'Export as JPEG' button.
+    """Make the design HTML self-contained and add the 'Export as JPEG' button.
 
-    Ensures a `<div id="poster">` wrapper exists, then injects html2canvas and
-    a floating button that downloads the poster as a JPEG.
+    Ensures a `<div id="poster">` wrapper exists, then injects the vendored
+    html-to-image library and a floating button that downloads the poster as a
+    JPEG (also handles export from inside the Streamlit component iframe).
     """
     if not html or not html.strip():
         return ""
@@ -267,6 +268,26 @@ def finalize_html(html, export_filename):
     return html
 
 
+_HTML_TO_IMAGE_LIB = None
+
+
+def _html_to_image_lib():
+    """Read the vendored html-to-image library once and return its source.
+
+    Vendored (assets/html-to-image.min.js) so the export never depends on a
+    CDN that may be blocked or slow.
+    """
+    global _HTML_TO_IMAGE_LIB
+    if _HTML_TO_IMAGE_LIB is None:
+        path = os.path.join(os.path.dirname(__file__), "assets", "html-to-image.min.js")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                _HTML_TO_IMAGE_LIB = f.read()
+        except Exception:
+            _HTML_TO_IMAGE_LIB = ""
+    return _HTML_TO_IMAGE_LIB
+
+
 def _export_tool_html(filename):
     jname = json.dumps(filename.rsplit(".", 1)[0] + ".jpeg")
     # html-to-image renders via SVG foreignObject, which keeps native text
@@ -285,6 +306,35 @@ def _export_tool_html(filename):
         "html,body{margin:0!important;padding:0!important;background:#ffffff;}"
         "</style>"
     )
+    lib = _html_to_image_lib().replace("</script>", "<\\/script>")
+    script = (
+        "<script>"
+        "document.addEventListener('DOMContentLoaded',function(){"
+        "var b=document.getElementById('export-jpeg');"
+        "if(!b){return;}"
+        "b.addEventListener('click',function(){"
+        "var el=document.getElementById('poster')||document.body;"
+        "if(typeof htmlToImage==='undefined'){alert('Export library failed to load.');return;}"
+        "var btn=this;btn.disabled=true;btn.textContent='Exporting...';"
+        "document.fonts.ready.then(function(){"
+        "return htmlToImage.toJpeg(el,{pixelRatio:2,backgroundColor:'#ffffff',quality:0.95});"
+        "}).then(function(url){"
+        "var fname=" + jname + ";"
+        "function dl(doc){var a=doc.createElement('a');a.download=fname;a.href=url;"
+        "doc.body.appendChild(a);a.click();a.remove();}"
+        "var done=false;"
+        "try{if(window.parent&&window.parent.document){dl(window.parent.document);done=true;}}catch(e){}"
+        "if(!done){try{dl(document);done=true;}catch(e){}}"
+        "if(!done){window.open(url,'_blank');}"
+        "btn.disabled=false;btn.textContent='Export as JPEG';"
+        "}).catch(function(e){"
+        "btn.disabled=false;btn.textContent='Export as JPEG';"
+        "alert('Export failed: '+e.message);"
+        "});"
+        "});"
+        "});"
+        "</script>"
+    )
     return (
         fonts_link
         + portrait_css
@@ -294,23 +344,8 @@ def _export_tool_html(filename):
         'font-family:Arial,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.3);">'
         'Export as JPEG</button>'
         "</div>"
-        '<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>'
-        "<script>"
-        'document.addEventListener("DOMContentLoaded",function(){'
-        'var b=document.getElementById("export-jpeg");'
-        'if(b){b.addEventListener("click",function(){'
-        'var el=document.getElementById("poster")||document.body;'
-        'if(typeof htmlToImage==="undefined"){alert("Export library failed to load. Check your internet connection.");return;}'
-        'document.fonts.ready.then(function(){'
-        'return htmlToImage.toJpeg(el,{pixelRatio:2,backgroundColor:"#ffffff",quality:0.95});'
-        "}).then(function(url){"
-        'var a=document.createElement("a");'
-        'a.download=' + jname + ";"
-        'a.href=url;document.body.appendChild(a);a.click();'
-        "}).catch(function(e){alert('Export failed: '+e.message);});"
-        "});});}"
-        "});"
-        "</script>"
+        f"<script>{lib}</script>"
+        + script
     )
 
 
