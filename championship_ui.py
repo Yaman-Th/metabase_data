@@ -19,6 +19,7 @@ from gemini_design import (
     build_leaderboard_prompt,
     build_matches_prompt,
     friendly_error,
+    THEME_CHOICES,
 )
 
 try:
@@ -299,8 +300,15 @@ def _render_poster(key_prefix, build_prompt, default_filename, label="AI Poster"
 def _render_html_design(key_prefix, render_html, default_filename, label="HTML Design"):
     st.markdown(f"**{label}**")
     st.caption("Fixed design template — always the same, only the data updates.")
+    theme = st.selectbox(
+        "Theme color",
+        options=list(THEME_CHOICES),
+        format_func=lambda k: THEME_CHOICES[k],
+        index=0,
+        key=f"{key_prefix}_theme",
+    )
     try:
-        html = finalize_html(render_html(), default_filename)
+        html = finalize_html(render_html(theme), default_filename)
     except Exception as e:
         st.error(f"Design generation failed: {e}")
         return
@@ -637,7 +645,7 @@ def render():
                             )
                             _render_html_design(
                                 key_prefix=f"html_rnd_{rnd['id']}",
-                                render_html=lambda args=_matches_jpeg_args, rr=rnd: render_matches_html(args, rr["name"]),
+                                render_html=lambda theme, args=_matches_jpeg_args, rr=rnd: render_matches_html(args, rr["name"], theme=theme),
                                 default_filename=f"{rnd['name']}_design.html",
                                 label="HTML Design",
                             )
@@ -844,7 +852,7 @@ def render():
             )
             _render_html_design(
                 key_prefix="lb_html",
-                render_html=lambda: render_leaderboard_html(df, title="لوحة المتصدرين"),
+                render_html=lambda theme: render_leaderboard_html(df, title="لوحة المتصدرين", theme=theme),
                 default_filename="leaderboard_design.html",
                 label="HTML Design",
             )

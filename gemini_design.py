@@ -137,6 +137,117 @@ def _read_template(name):
     return _TEMPLATE_CACHE[name]
 
 
+# ---- Color themes ----
+# The templates declare the palette as CSS variables on :root (green by
+# default). Selecting another theme injects a :root override after the
+# template's own <style>, so only the theme vars change.
+THEME_CHOICES = {
+    "green": "Green (default)",
+    "blue": "Blue",
+    "purple": "Purple",
+    "red": "Red",
+    "teal": "Teal",
+    "amber": "Amber",
+}
+
+THEMES = {
+    "blue": {
+        "--page-bg": "#020b16",
+        "--poster-bg": "#04182b",
+        "--glow": "#0a3d6b",
+        "--glow-end": "#051625",
+        "--gold": "#5aa7ff",
+        "--gold-dark": "#2f7bd6",
+        "--gold-light": "#9ccaff",
+        "--gold-soft": "#cfe6ff",
+        "--gold-rgb": "90, 167, 255",
+        "--accent-rgb": "6, 30, 52",
+        "--accent-dark-rgb": "4, 22, 40",
+        "--label": "#9db8d1",
+        "--label-rgb": "157, 184, 209",
+    },
+    "purple": {
+        "--page-bg": "#0d0716",
+        "--poster-bg": "#1a0f2e",
+        "--glow": "#3b1f6b",
+        "--glow-end": "#170b28",
+        "--gold": "#b58cff",
+        "--gold-dark": "#8a5fd6",
+        "--gold-light": "#d2bcff",
+        "--gold-soft": "#e6d9ff",
+        "--gold-rgb": "181, 140, 255",
+        "--accent-rgb": "30, 16, 52",
+        "--accent-dark-rgb": "22, 12, 40",
+        "--label": "#b9a6d1",
+        "--label-rgb": "185, 166, 209",
+    },
+    "red": {
+        "--page-bg": "#140505",
+        "--poster-bg": "#260909",
+        "--glow": "#5e1b1b",
+        "--glow-end": "#1f0707",
+        "--gold": "#ff8a80",
+        "--gold-dark": "#d6504a",
+        "--gold-light": "#ffbdb8",
+        "--gold-soft": "#ffdedb",
+        "--gold-rgb": "255, 138, 128",
+        "--accent-rgb": "48, 12, 12",
+        "--accent-dark-rgb": "38, 9, 9",
+        "--label": "#d1a6a6",
+        "--label-rgb": "209, 166, 166",
+    },
+    "teal": {
+        "--page-bg": "#031410",
+        "--poster-bg": "#05241d",
+        "--glow": "#0b4f40",
+        "--glow-end": "#041a15",
+        "--gold": "#4fd9b8",
+        "--gold-dark": "#2ba88c",
+        "--gold-light": "#9aeeda",
+        "--gold-soft": "#d0f5eb",
+        "--gold-rgb": "79, 217, 184",
+        "--accent-rgb": "8, 40, 33",
+        "--accent-dark-rgb": "5, 28, 24",
+        "--label": "#96c4b9",
+        "--label-rgb": "150, 196, 185",
+    },
+    "amber": {
+        "--page-bg": "#160e03",
+        "--poster-bg": "#2a1a05",
+        "--glow": "#6b4710",
+        "--glow-end": "#221304",
+        "--gold": "#ffc94d",
+        "--gold-dark": "#d19c1f",
+        "--gold-light": "#ffdf99",
+        "--gold-soft": "#fff0cd",
+        "--gold-rgb": "255, 201, 77",
+        "--accent-rgb": "56, 36, 10",
+        "--accent-dark-rgb": "44, 28, 8",
+        "--label": "#d6bd92",
+        "--label-rgb": "214, 189, 146",
+    },
+}
+
+
+def _theme_css(theme):
+    """Return a <style> block overriding the template palette for a theme."""
+    if not theme or theme == "green":
+        return ""
+    overrides = THEMES.get(theme)
+    if not overrides:
+        return ""
+    decls = "".join(f"{k}:{v};" for k, v in overrides.items())
+    return f"<style>:root{{{decls}}}</style>"
+
+
+def _apply_theme(html, theme):
+    """Inject the theme CSS right before </head> so it wins over the defaults."""
+    css = _theme_css(theme)
+    if css and "</head>" in html:
+        return html.replace("</head>", css + "</head>")
+    return html
+
+
 def _esc(v):
     return html.escape(str(v), quote=True)
 
@@ -172,7 +283,7 @@ _LB_SPEC = [
 ]
 
 
-def render_leaderboard_html(df, title="لوحة المتصدرين"):
+def render_leaderboard_html(df, title="لوحة المتصدرين", theme="green"):
     """Fixed leaderboard poster: the approved HTML template + data rows."""
     dfcols = [str(c) for c in df.columns]
     selected = []
@@ -220,10 +331,11 @@ def render_leaderboard_html(df, title="لوحة المتصدرين"):
         cls = f' class="top-row-{i}"' if i <= 3 else ""
         rows.append(f"                    <tr{cls}>" + "".join(tds) + "</tr>")
 
-    return (
+    return _apply_theme(
         _read_template("leaderboard_template.html")
         .replace("{{TITLE}}", _esc(title))
-        .replace("{{LB_ROWS}}", "\n".join(rows))
+        .replace("{{LB_ROWS}}", "\n".join(rows)),
+        theme,
     )
 
 
@@ -243,7 +355,7 @@ def _competitor(name, pages, points, side, winner):
                 </div>"""
 
 
-def render_matches_html(matches, round_name):
+def render_matches_html(matches, round_name, theme="green"):
     """Fixed matches poster: the approved HTML template + match cards."""
     cards = []
     for m in matches:
@@ -257,10 +369,11 @@ def render_matches_html(matches, round_name):
             "            </div>"
         )
 
-    return (
+    return _apply_theme(
         _read_template("matches_template.html")
         .replace("{{ROUND_NAME}}", _esc(round_name))
-        .replace("{{MATCH_CARDS}}", "\n".join(cards))
+        .replace("{{MATCH_CARDS}}", "\n".join(cards)),
+        theme,
     )
 
 
@@ -424,7 +537,10 @@ def _export_tool_html(filename):
         "el.style.setProperty('max-width','1080px','important');"
         "document.fonts.ready.then(function(){"
         "var w=el.offsetWidth,h=el.offsetHeight;"
-        "return htmlToImage.toJpeg(el,{width:w,height:h,pixelRatio:2,backgroundColor:'#03120c',quality:0.95,cacheBust:true});"
+        "var bg='#03120c';"
+        "try{var cb=getComputedStyle(document.body).backgroundColor;"
+        "if(cb&&cb!=='transparent'&&cb!=='rgba(0, 0, 0, 0)'){bg=cb;}}catch(e){}"
+        "return htmlToImage.toJpeg(el,{width:w,height:h,pixelRatio:2,backgroundColor:bg,quality:0.95,cacheBust:true});"
         "}).then(function(url){"
         "el.style.cssText=oldCss;"
         "var fname=" + jname + ";"
