@@ -7,6 +7,7 @@ import os
 import io
 from datetime import datetime, date, timedelta
 import championship as ch
+import dashboard
 from config import METABASE_DATASETS, TEMP_DATA_DIR, GOOGLE_SHEET_ID, GOOGLE_SHEET_RANGE, CH_DB_SHEET_ID
 from sheets_client import send_to_sheet
 from gemini_design import (
@@ -176,6 +177,48 @@ def _fig_to_jpeg(fig):
     fig.savefig(buf, format="jpeg", dpi=200, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return buf.getvalue()
+
+
+def _target_pie_chart(achieved, target, title, color):
+    if not _HAS_MPL:
+        return None
+    _init_mpl_font()
+    achieved_c = max(min(achieved, target), 0.0)
+    remaining = max(target - achieved_c, 0.0)
+    pct = (achieved / target * 100.0) if target else 0.0
+
+    fig, ax = plt.subplots(figsize=(5.2, 4.6))
+    labels = [
+        f"{_shape_arabic('تحقق')} {achieved_c:,.0f}",
+        f"{_shape_arabic('متبقٍ')} {remaining:,.0f}",
+    ]
+    wedges, texts, autotexts = ax.pie(
+        [achieved_c, remaining],
+        colors=[color, "#d9d9d9"],
+        startangle=90,
+        counterclock=False,
+        labels=labels,
+        autopct=lambda p: f"{p:.0f}%" if p > 0 else "",
+        pctdistance=0.72,
+        labeldistance=1.08,
+    )
+    for t in texts:
+        if _ARABIC_FP is not None:
+            t.set_fontproperties(_ARABIC_FP)
+        t.set_fontsize(11)
+    for at in autotexts:
+        if _ARABIC_FP is not None:
+            at.set_fontproperties(_ARABIC_FP)
+        at.set_fontsize(10)
+        at.set_color("white")
+    ax.set_title(
+        _shape_arabic(f"{title}: {achieved_c:,.0f} / {target:,.0f} ({pct:.0f}%)"),
+        fontproperties=_ARABIC_FP,
+        fontsize=13,
+        pad=16,
+    )
+    ax.axis("equal")
+    return _fig_to_jpeg(fig)
 
 
 def _render_poster(key_prefix, build_prompt, default_filename, label="AI Poster"):
@@ -429,8 +472,8 @@ def render():
         )
         del st.session_state["ch_storage_error"]
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Students", "Rounds & Matches", "Daily Entry", "Leaderboard", "Export"
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Students", "Rounds & Matches", "Daily Entry", "Leaderboard", "Dashboard", "Export"
     ])
 
     all_students = ch.get_students()
@@ -776,9 +819,95 @@ def render():
             st.info("No data yet")
 
     # =========================================================
-    # TAB 5: EXPORT
+    # TAB 5: DASHBOARD
     # =========================================================
     with tab5:
+        st.subheader("Dashboard")
+        st.caption("Statistics from Metabase between two dates (both dates included).")
+
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            d_from = st.date_input("From", value=dashboard.TARGET_START, key="dash_from")
+        with col_d2:
+            d_to = st.date_input("To", value=dashboard.TARGET_END, key="dash_to")
+
+        if st.button("Compute Statistics", key="dash_compute", type="primary"):
+            with st.spinner("Fetching Metabase data..."):
+                try:
+                    dashboard.clear_cache()
+                    st.session_state["dash_stats"] = dashboard.compute_stats(d_from, d_to)
+                    st.session_state["dash_period"] = f"{d_from} → {d_to}"
+                except Exception as e:
+                    st.error(f"Failed to load statistics: {e}")
+                    st.session_state.pop("dash_stats", None)
+
+        stats = st.session_state.get("dash_stats")
+        if not stats:
+            st.info("Choose a date range and click **Compute Statistics**.")
+        else:
+            period = st.session_state.get("dash_period", "")
+            if period:
+                st.markdown(f"**Period:** {period}")
+
+            st.divider()
+            st.markdown("**1) Daily totals**")
+            df_daily = pd.DataFrame(stats["daily"])
+            if df_daily.empty:
+                st.info("No data in this period.")
+            else:
+                df_daily = df_daily.rename(columns={
+                    "date": "التاريخ", "tikrar": "التكرار", "jadeed": "الجديد", "total": "الإجمالي",
+                })
+                st.dataframe(df_daily, width='stretch', hide_index=True)
+                st.download_button(
+                    "Download daily CSV", data=df_daily.to_csv(index=False).encode("utf-8"),
+                    file_name="daily_totals.csv", mime="text/csv", key="dash_dl_daily",
+                )
+
+            st.divider()
+            st.markdown("**2) Totals per student**")
+            df_students = pd.DataFrame(stats["students"])
+            if df_students.empty:
+                st.info("No data in this period.")
+            else:
+                df_students = df_students.rename(columns={
+                    "name": "الطالب", "tikrar": "التكرار", "jadeed": "الجديد", "total": "الإجمالي",
+                })
+                st.dataframe(df_students, width='stretch', hide_index=True)
+                st.download_button(
+                    "Download students CSV", data=df_students.to_csv(index=False).encode("utf-8"),
+                    file_name="student_totals.csv", mime="text/csv", key="dash_dl_students",
+                )
+
+            st.divider()
+            tgt = stats["target"]
+            st.markdown(f"**3) Target progress** (static period: {dashboard.TARGET_START} → {dashboard.TARGET_END})")
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                img1 = _target_pie_chart(tgt["tikrar_achieved"], tgt["tikrar_target"], "التكرار", "#2ca02c")
+                if img1:
+                    st.image(img1)
+                    st.download_button(
+                        "Download Tikrar chart", data=img1, file_name="tikrar_target.png",
+                        mime="image/png", key="dash_dl_p1",
+                    )
+                else:
+                    st.info("matplotlib not available")
+            with col_p2:
+                img2 = _target_pie_chart(tgt["jadeed_achieved"], tgt["jadeed_target"], "الجديد", "#1f77b4")
+                if img2:
+                    st.image(img2)
+                    st.download_button(
+                        "Download Jadeed chart", data=img2, file_name="jadeed_target.png",
+                        mime="image/png", key="dash_dl_p2",
+                    )
+                else:
+                    st.info("matplotlib not available")
+
+    # =========================================================
+    # TAB 6: EXPORT
+    # =========================================================
+    with tab6:
         st.subheader("Export to Google Sheets")
         st.caption("Exports go to the Championship DB spreadsheet (Sheet1), separate from the Data Viewer sheet.")
         sheet_id = st.text_input("Google Sheet ID", value=CH_DB_SHEET_ID or GOOGLE_SHEET_ID)
