@@ -147,9 +147,14 @@ def compute_stats(date_from, date_to, student_names=None):
         for d, s, v in records:
             if allowed is not None and s not in allowed:
                 continue
-            daily.setdefault(d, [0.0, 0.0])[idx] += v
-            students.setdefault(s, [0.0, 0.0])[idx] += v
-            all_records.append((d, s, v, kind))
+            dd = _as_date(d)
+            if dd is None:
+                continue
+            if date_from <= dd <= date_to:
+                daily.setdefault(d, [0.0, 0.0])[idx] += v
+                students.setdefault(s, [0.0, 0.0])[idx] += v
+            if TARGET_START <= dd <= TARGET_END:
+                all_records.append((d, s, v, kind))
 
     daily_rows = []
     cur = date_from
@@ -177,9 +182,6 @@ def compute_stats(date_from, date_to, student_names=None):
     t_ach = 0.0
     j_ach = 0.0
     for d, _, v, kind in all_records:
-        dd = _as_date(d)
-        if dd is None or not (TARGET_START <= dd <= TARGET_END):
-            continue
         if kind == "tikrar":
             t_ach += v
         else:
