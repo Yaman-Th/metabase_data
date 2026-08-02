@@ -152,7 +152,6 @@ tbody tr:nth-child(3) td{color:#7c4d1b;background:#f7ead8}
 .pitcher .star{font-size:24px;margin-left:6px;color:#e3c76a}
 .pitcher .pages{font-size:26px;color:#c9a227;font-weight:700;margin-top:8px}
 .vs{font-size:28px;font-weight:900;color:#8aa89a;background:#f1f5f1;width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.match-result{margin-top:18px;background:#f6f9f4;border:1px dashed #c9dcc9;border-radius:12px;padding:12px;text-align:center;font-size:24px;font-weight:700;color:#14532d}
 .foot{padding:26px 0 10px;text-align:center;color:#7a8b7a;font-size:22px}
 .foot .orn{color:#c9a227;font-size:22px}
 """
@@ -234,7 +233,6 @@ def render_matches_html(matches, round_name):
             '<div class="vs">ضد</div>'
             f'{_pitcher(m["s2"], m["pages2"], p2 > p1)}'
             "</div>"
-            f'<div class="match-result">النتيجة: {_esc(m["result_text"])}</div>'
             "</div>"
         )
     return _design_document(round_name, "مواجهات المسابقة", "\n".join(cards))
