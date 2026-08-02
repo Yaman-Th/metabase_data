@@ -128,10 +128,16 @@ def _as_date(d):
             return None
 
 
-def compute_stats(date_from, date_to):
+def compute_stats(date_from, date_to, student_names=None):
+    """Aggregate tikrar/jadeed between two inclusive dates.
+
+    If `student_names` is given (iterable of names), only records belonging to
+    those students are included (i.e. the Championship students tab list).
+    """
     daily = {}
     students = {}
     all_records = []
+    allowed = set(student_names) if student_names is not None else None
 
     for label, url in METABASE_DATASETS.items():
         records, kind = _extract(label, url)
@@ -139,6 +145,8 @@ def compute_stats(date_from, date_to):
             continue
         idx = 0 if kind == "tikrar" else 1
         for d, s, v in records:
+            if allowed is not None and s not in allowed:
+                continue
             daily.setdefault(d, [0.0, 0.0])[idx] += v
             students.setdefault(s, [0.0, 0.0])[idx] += v
             all_records.append((d, s, v, kind))

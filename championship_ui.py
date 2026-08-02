@@ -835,8 +835,10 @@ def render():
             with st.spinner("Fetching Metabase data..."):
                 try:
                     dashboard.clear_cache()
-                    st.session_state["dash_stats"] = dashboard.compute_stats(d_from, d_to)
+                    student_names = [s["name"] for s in all_students] if all_students else None
+                    st.session_state["dash_stats"] = dashboard.compute_stats(d_from, d_to, student_names=student_names)
                     st.session_state["dash_period"] = f"{d_from} → {d_to}"
+                    st.session_state["dash_students"] = len(student_names or [])
                 except Exception as e:
                     st.error(f"Failed to load statistics: {e}")
                     st.session_state.pop("dash_stats", None)
@@ -846,8 +848,9 @@ def render():
             st.info("Choose a date range and click **Compute Statistics**.")
         else:
             period = st.session_state.get("dash_period", "")
+            n_students = st.session_state.get("dash_students", 0)
             if period:
-                st.markdown(f"**Period:** {period}")
+                st.markdown(f"**Period:** {period}  |  **Students:** {n_students}")
 
             st.divider()
             st.markdown("**1) Daily totals**")
