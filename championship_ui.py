@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import requests
 import json
@@ -8,6 +9,17 @@ from datetime import datetime, date, timedelta
 import championship as ch
 from config import METABASE_DATASETS, TEMP_DATA_DIR, GOOGLE_SHEET_ID, GOOGLE_SHEET_RANGE, CH_DB_SHEET_ID
 from sheets_client import send_to_sheet
+from gemini_design import (
+    gemini_enabled,
+    generate_poster,
+    generate_html,
+    finalize_html,
+    build_leaderboard_prompt,
+    build_matches_prompt,
+    build_leaderboard_html_prompt,
+    build_matches_html_prompt,
+    friendly_error,
+)
 
 try:
     import matplotlib
@@ -164,6 +176,71 @@ def _fig_to_jpeg(fig):
     fig.savefig(buf, format="jpeg", dpi=200, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return buf.getvalue()
+
+
+def _render_poster(key_prefix, build_prompt, default_filename, label="AI Poster"):
+    st.markdown(f"**{label}**")
+    if not gemini_enabled():
+        st.caption("Set `GEMINI_API_KEY` in Streamlit secrets to enable AI poster generation.")
+        return
+    img_key = f"{key_prefix}_img"
+    mime_key = f"{key_prefix}_mime"
+    if st.button("Generate poster (Gemini)", key=f"{key_prefix}_btn"):
+        with st.spinner("Gemini is designing the poster..."):
+            try:
+                img_bytes, mime = generate_poster(build_prompt())
+                if img_bytes:
+                    st.session_state[img_key] = img_bytes
+                    st.session_state[mime_key] = mime or "image/png"
+                else:
+                    st.error("Gemini returned no image. Try again.")
+            except Exception as e:
+                msg = friendly_error(e)
+                st.error(msg if msg else f"Poster generation failed: {e}")
+    img = st.session_state.get(img_key)
+    if img:
+        st.image(img)
+        mime = st.session_state.get(mime_key, "image/png")
+        ext = {"image/png": "png", "image/jpeg": "jpg"}.get(mime, "png")
+        fname = default_filename.rsplit(".", 1)[0] + "." + ext
+        st.download_button(
+            "Download poster",
+            data=img,
+            file_name=fname,
+            mime=mime,
+            key=f"{key_prefix}_dl",
+        )
+
+
+def _render_html_design(key_prefix, build_prompt, default_filename, label="HTML Design (Gemini)"):
+    st.markdown(f"**{label}**")
+    if not gemini_enabled():
+        st.caption("Set `GEMINI_API_KEY` in Streamlit secrets to enable AI design generation.")
+        return
+    html_key = f"{key_prefix}_html"
+    if st.button("Generate HTML design (Gemini)", key=f"{key_prefix}_html_btn"):
+        with st.spinner("Gemini is writing the design..."):
+            try:
+                raw = generate_html(build_prompt())
+                if raw and raw.strip():
+                    st.session_state[html_key] = finalize_html(raw, default_filename)
+                else:
+                    st.error("Gemini returned no content. Try again.")
+            except Exception as e:
+                msg = friendly_error(e)
+                st.error(msg if msg else f"Design generation failed: {e}")
+    html = st.session_state.get(html_key)
+    if html:
+        components.html(html, height=640, scrolling=True)
+        col_d, col_c = st.columns(2)
+        col_d.download_button(
+            "Download HTML",
+            data=html.encode("utf-8"),
+            file_name=default_filename,
+            mime="text/html",
+            key=f"{key_prefix}_html_dl",
+        )
+        col_c.caption("Open the HTML in a browser, then click **Export as JPEG** to save the design as an image.")
 
 
 def _leaderboard_to_image(df, title="Leaderboard"):
@@ -476,6 +553,18 @@ def render():
                                     mime="image/jpeg",
                                     key=f"jpeg_m_{rnd['id']}",
                                 )
+                            _render_poster(
+                                key_prefix=f"poster_rnd_{rnd['id']}",
+                                build_prompt=lambda args=_matches_jpeg_args, rr=rnd: build_matches_prompt(args, rr["name"]),
+                                default_filename=f"{rnd['name']}_poster.png",
+                                label="AI Poster (Gemini)",
+                            )
+                            _render_html_design(
+                                key_prefix=f"html_rnd_{rnd['id']}",
+                                build_prompt=lambda args=_matches_jpeg_args, rr=rnd: build_matches_html_prompt(args, rr["name"]),
+                                default_filename=f"{rnd['name']}_design.html",
+                                label="HTML Design (free tier)",
+                            )
                     else:
                         st.info("No matches yet.")
 
@@ -669,6 +758,20 @@ def render():
                 col_j2.download_button("Download as JPEG", data=jpeg, file_name="leaderboard.jpeg", mime="image/jpeg")
             else:
                 col_j2.info("matplotlib not available")
+
+            st.divider()
+            _render_poster(
+                key_prefix="lb_poster",
+                build_prompt=lambda: build_leaderboard_prompt(df, title="لوحة المتصدرين"),
+                default_filename="leaderboard_poster.png",
+                label="AI Poster (Gemini)",
+            )
+            _render_html_design(
+                key_prefix="lb_html",
+                build_prompt=lambda: build_leaderboard_html_prompt(df, title="لوحة المتصدرين"),
+                default_filename="leaderboard_design.html",
+                label="HTML Design (free tier)",
+            )
         else:
             st.info("No data yet")
 
