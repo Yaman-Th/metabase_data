@@ -743,16 +743,27 @@ def render():
             st.warning("Add students first")
 
         st.divider()
-        st.subheader("Recent Records")
+        st.subheader("Daily Records")
 
         all_daily = ch.get_daily()
         all_hw = ch.get_homework()
         hw_map = {(h["student_id"], h["date"]): h for h in all_hw}
 
+        rec_round_opts = [("all", "All Rounds")] + [(r["id"], r["name"]) for r in all_rounds]
+        rec_filter_round = st.selectbox(
+            "Filter by round",
+            options=rec_round_opts,
+            format_func=lambda x: x[1],
+            key="rec_filter_round",
+        )
+
         if all_daily:
-            recent = sorted(all_daily, key=lambda x: x["date"], reverse=True)[:50]
+            shown = all_daily
+            if rec_filter_round[0] != "all":
+                match_ids = {m["id"] for m in ch.get_matches() if m["round_id"] == rec_filter_round[0]}
+                shown = [d for d in all_daily if d["match_id"] in match_ids]
             rows = []
-            for d in recent:
+            for d in sorted(shown, key=lambda x: (x["date"], x["match_id"])):
                 sname = ch.get_student_name(d["student_id"], all_students)
                 h = hw_map.get((d["student_id"], d["date"]))
                 if h:
@@ -773,15 +784,15 @@ def render():
                     "Tikrar HW": f"{t}/{hw_t}",
                     "Done": "✅" if ok else "❌",
                 })
-            st.markdown("**Daily pages (fetched from Metabase / entered)**")
+            st.markdown("**Daily pages (fetched from Metabase / entered) — all records, no limit**")
             st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
+            st.caption(f"{len(rows)} records shown")
         else:
             st.info("No daily records yet")
 
         if all_hw:
-            recent_hw = sorted(all_hw, key=lambda x: x["date"], reverse=True)[:50]
             rows_hw = []
-            for h in recent_hw:
+            for h in sorted(all_hw, key=lambda x: x["date"]):
                 sname = ch.get_student_name(h["student_id"], all_students)
                 rows_hw.append({
                     "Date": h["date"],
@@ -789,8 +800,9 @@ def render():
                     "Jadeed HW": h.get("homework_jadeed", 0),
                     "Tikrar HW": h.get("homework_tikrar", 0),
                 })
-            st.markdown("**Homework targets (manually entered)**")
+            st.markdown("**Homework targets (manually entered) — all records, no limit**")
             st.dataframe(pd.DataFrame(rows_hw), width='stretch', hide_index=True)
+            st.caption(f"{len(rows_hw)} records shown")
         else:
             st.info("No homework records yet")
 
@@ -1026,5 +1038,24 @@ def _batch_fetch_round(rnd):
             f"Round {rnd['name']}: {len(records)} daily records synced "
             f"({fetched} from Metabase, {missing} set to 0 pages for days with no Metabase row)"
         )
+        round_daily = [
+            d for d in ch.get_daily()
+            if d["match_id"] in {m["id"] for m in matches}
+        ]
+        rows = []
+        for d in sorted(round_daily, key=lambda x: (x["date"], x["match_id"])):
+            sname = ch.get_student_name(d["student_id"])
+            rows.append({
+                "Date": d["date"],
+                "Student": sname,
+                "Jadeed": d.get("jadeed", 0),
+                "Tikrar": d.get("tikrar", 0),
+            })
+        if rows:
+            st.markdown(
+                f"**Fetched daily records — all days from {start} to {end} "
+                f"(both included), one row per student per day**"
+            )
+            st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
     else:
         st.info("No daily data for this round")
