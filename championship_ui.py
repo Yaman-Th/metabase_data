@@ -683,87 +683,78 @@ def render():
     # =========================================================
     with tab3:
         st.subheader("Daily Homework Entry")
+        st.caption(
+            "Homework targets are saved separately from the pages fetched from "
+            "Metabase — saving homework never changes the round match data."
+        )
 
         col_a, col_b = st.columns(2)
         with col_a:
-            entry_date = st.date_input("Date", value=date.today())
+            entry_date = st.date_input("Date", value=date.today(), key="hw_entry_date")
         with col_b:
-            matches_all = ch.get_matches()
-            if matches_all:
-                match_opts = []
-                for m in matches_all:
-                    s1 = ch.get_student_name(m["student1_id"], all_students)
-                    s2 = ch.get_student_name(m["student2_id"], all_students)
-                    match_opts.append((m["id"], f"{s1} vs {s2}"))
-                selected_match = st.selectbox(
-                    "Match",
-                    options=match_opts,
+            if all_students:
+                selected_student = st.selectbox(
+                    "Student",
+                    options=[(s["id"], s["name"]) for s in all_students],
                     format_func=lambda x: x[1],
-                    key="daily_match",
+                    key="hw_student",
                 )
             else:
-                st.warning("No matches created yet")
-                selected_match = None
+                selected_student = None
 
-        if selected_match:
-            mid = selected_match[0]
-            match_obj = next((m for m in matches_all if m["id"] == mid), None)
-            if match_obj:
-                for label, sid in [("Student 1", match_obj["student1_id"]), ("Student 2", match_obj["student2_id"])]:
-                    sname = ch.get_student_name(sid, all_students)
-                    st.markdown(f"**{label}: {sname}**")
+        if selected_student:
+            sid = selected_student[0]
+            sname = selected_student[1]
 
-                    existing = None
-                    for d in ch.get_daily():
-                        if d["match_id"] == mid and d["student_id"] == sid and d["date"] == str(entry_date):
-                            existing = d
-                            break
+            existing_hw = ch.get_homework_by_date(sid, entry_date)
+            if existing_hw:
+                def_hw_j = existing_hw.get("homework_jadeed", 0.0)
+                def_hw_t = existing_hw.get("homework_tikrar", 0.0)
+            else:
+                def_hw_j, def_hw_t = ch.get_student_homework_defaults(sid, all_students)
 
-                    existing_hw = None
-                    for h in ch.get_homework():
-                        if h["match_id"] == mid and h["student_id"] == sid and h["date"] == str(entry_date):
-                            existing_hw = h
-                            break
+            st.markdown(f"**Student: {sname}** — {entry_date}")
 
-                    if existing_hw:
-                        def_hw_j = existing_hw.get("homework_jadeed", 0.0)
-                        def_hw_t = existing_hw.get("homework_tikrar", 0.0)
-                    else:
-                        def_hw_j, def_hw_t = ch.get_student_homework_defaults(sid, all_students)
+            page_rows = [d for d in ch.get_daily() if d["student_id"] == sid and d["date"] == str(entry_date)]
+            if page_rows:
+                pj = sum(d.get("jadeed", 0) for d in page_rows)
+                pt = sum(d.get("tikrar", 0) for d in page_rows)
+                st.caption(
+                    f"Fetched pages for this day: Jadeed {pj:g} / Tikrar {pt:g} "
+                    "(read-only, loaded from Metabase via the round's Auto-fetch)."
+                )
+            else:
+                st.caption("No fetched pages for this day yet — use the round's Auto-fetch to load them from Metabase.")
 
-                    col_j, col_t, col_hj, col_ht, col_s, col_del = st.columns([1, 1, 1, 1, 1, 1])
-                    with col_j:
-                        jadeed = col_j.number_input("Jadeed", value=float(existing["jadeed"]) if existing else 0.0, min_value=0.0, key=f"j_{mid}_{sid}_{entry_date}")
-                    with col_t:
-                        tikrar = col_t.number_input("Tikrar", value=float(existing["tikrar"]) if existing else 0.0, min_value=0.0, key=f"t_{mid}_{sid}_{entry_date}")
-                    with col_hj:
-                        hw_j = col_hj.number_input("Jadeed HW", value=def_hw_j, min_value=0.0, key=f"hwj_{mid}_{sid}_{entry_date}")
-                    with col_ht:
-                        hw_t = col_ht.number_input("Tikrar HW", value=def_hw_t, min_value=0.0, key=f"hwt_{mid}_{sid}_{entry_date}")
-                    with col_s:
-                        if st.button("Save", key=f"sv_{mid}_{sid}_{entry_date}"):
-                            ch.upsert_daily(mid, sid, entry_date, jadeed, tikrar)
-                            ch.upsert_homework(mid, sid, entry_date, hw_j, hw_t)
-                            st.rerun()
-                    with col_del:
-                        if existing and st.button("Clear", key=f"cl_{mid}_{sid}_{entry_date}"):
-                            ch.delete_daily(mid, sid, entry_date)
-                            ch.delete_homework(mid, sid, entry_date)
-                            st.rerun()
+            col_j, col_t, col_s, col_del = st.columns([1, 1, 1, 1])
+            with col_j:
+                hw_j = col_j.number_input("Jadeed HW", value=float(def_hw_j), min_value=0.0, step=0.5, key=f"hwj_{sid}_{entry_date}")
+            with col_t:
+                hw_t = col_t.number_input("Tikrar HW", value=float(def_hw_t), min_value=0.0, step=0.5, key=f"hwt_{sid}_{entry_date}")
+            with col_s:
+                if st.button("Save Homework", key=f"svh_{sid}_{entry_date}"):
+                    ch.upsert_homework(sid, entry_date, hw_j, hw_t)
+                    st.rerun()
+            with col_del:
+                if existing_hw and st.button("Clear", key=f"clh_{sid}_{entry_date}"):
+                    ch.delete_homework(sid, entry_date)
+                    st.rerun()
+        else:
+            st.warning("Add students first")
 
         st.divider()
         st.subheader("Recent Records")
 
         all_daily = ch.get_daily()
         all_hw = ch.get_homework()
-        hw_map = {(h["match_id"], h["student_id"], h["date"]): h for h in all_hw}
+        hw_map = {(h["student_id"], h["date"]): h for h in all_hw}
 
         if all_daily:
             recent = sorted(all_daily, key=lambda x: x["date"], reverse=True)[:50]
             rows = []
             for d in recent:
                 sname = ch.get_student_name(d["student_id"], all_students)
-                h = hw_map.get((d["match_id"], d["student_id"], d["date"]))
+                h = hw_map.get((d["student_id"], d["date"]))
                 if h:
                     hw_j = h.get("homework_jadeed", 0)
                     hw_t = h.get("homework_tikrar", 0)

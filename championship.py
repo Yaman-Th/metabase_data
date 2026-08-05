@@ -107,8 +107,6 @@ def delete_round(rid):
     del_ids = {m["id"] for m in round_matches}
     daily = [d for d in get_daily() if d["match_id"] not in del_ids]
     _save("daily", daily)
-    homework = [h for h in get_homework() if h["match_id"] not in del_ids]
-    _save("homework", homework)
 
 
 # --- Matches ---
@@ -134,8 +132,6 @@ def delete_match(mid):
     _save("matches", matches)
     daily = [d for d in get_daily() if d["match_id"] != mid]
     _save("daily", daily)
-    homework = [h for h in get_homework() if h["match_id"] != mid]
-    _save("homework", homework)
 
 
 # --- Daily Records (pages, fetched from Metabase or entered manually) ---
@@ -192,23 +188,35 @@ def delete_daily(mid, sid, rec_date):
     _save("daily", daily)
 
 
-# --- Homework Records (manually entered, never overwritten by fetch) ---
+# --- Homework Records (per student + date, manually entered, never
+# overwritten by the Metabase pages fetch) ---
 def get_homework():
     return _get("homework")
 
 
-def upsert_homework(match_id, student_id, rec_date, homework_jadeed, homework_tikrar):
+def get_homework_by_date(student_id, rec_date):
+    """Return the homework target record for a student on a given date (or
+    None). Homework is global per student+date (not tied to a match). If legacy
+    per-match records exist for the same date, the last one wins."""
+    day = str(rec_date)
+    found = None
+    for h in get_homework():
+        if h.get("student_id") == student_id and h.get("date") == day:
+            found = h
+    return found
+
+
+def upsert_homework(student_id, rec_date, homework_jadeed, homework_tikrar):
     homework = get_homework()
-    key = f"{match_id}_{student_id}_{rec_date}"
+    key = f"{student_id}_{rec_date}"
     for h in homework:
-        hk = f"{h['match_id']}_{h['student_id']}_{h['date']}"
+        hk = f"{h.get('student_id')}_{h['date']}"
         if hk == key:
             h["homework_jadeed"] = homework_jadeed
             h["homework_tikrar"] = homework_tikrar
             _save("homework", homework)
             return
     homework.append({
-        "match_id": match_id,
         "student_id": student_id,
         "date": str(rec_date),
         "homework_jadeed": homework_jadeed,
@@ -217,10 +225,10 @@ def upsert_homework(match_id, student_id, rec_date, homework_jadeed, homework_ti
     _save("homework", homework)
 
 
-def delete_homework(mid, sid, rec_date):
+def delete_homework(student_id, rec_date):
     homework = get_homework()
-    key = f"{mid}_{sid}_{rec_date}"
-    homework = [h for h in homework if f"{h['match_id']}_{h['student_id']}_{h['date']}" != key]
+    key = f"{student_id}_{rec_date}"
+    homework = [h for h in homework if f"{h.get('student_id')}_{h['date']}" != key]
     _save("homework", homework)
 
 
@@ -246,14 +254,15 @@ def get_student_daily_bonus_days(match_id, student_id, round_start, round_end):
     """Count days where BOTH homework types are met (jadeed >= hw_j AND
     tikrar >= hw_t). A 0-page homework target is always met, so a student with
     no homework (0/0) who recites nothing is counted as done. Homework targets
-    come from the homework table (manual entry); legacy daily records with
-    embedded homework fields are honored, then student defaults."""
+    come from the homework table (manual entry, keyed by student + date);
+    legacy daily records with embedded homework fields are honored, then
+    student defaults."""
     days = 0
     start = datetime.strptime(str(round_start), "%Y-%m-%d").date() if isinstance(round_start, str) else round_start
     end = datetime.strptime(str(round_end), "%Y-%m-%d").date() if isinstance(round_end, str) else round_end
     hw_by_date = {}
     for h in get_homework():
-        if h["match_id"] == match_id and h["student_id"] == student_id:
+        if h.get("student_id") == student_id:
             hw_by_date[h["date"]] = (h.get("homework_jadeed", 0), h.get("homework_tikrar", 0))
     def_hw_j, def_hw_t = get_student_homework_defaults(student_id)
     for d in get_daily():
